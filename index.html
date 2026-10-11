@@ -1,0 +1,674 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>html,body{margin:0}:root{color-scheme:light}</style>
+</head>
+<body>
+<title>Puzzle Road Trip</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* Layout concept: a road-atlas landing screen (highway guide sign + route map) that leads into a full-grid puzzle board. */
+:root {
+  --bg: #EDF1F4;
+  --surface: #FFFFFF;
+  --ink: #14202A;
+  --muted: #566673;
+  --line: #C9D3DB;
+  --water: #D9E5EE;
+  --land: #F8F9F6;
+  --road: #0E7A53;
+  --road-todo: #8796A3;
+  --sign: #0B6A47;
+  --sign-ink: #FFFFFF;
+  --marker: #F4B400;
+  --marker-ink: #14202A;
+  --board: #1B2630;
+  --seam: rgba(10, 18, 26, 0.55);
+  --danger: #C23B2E;
+  --f-disp: 'Barlow Condensed', 'Arial Narrow', 'Helvetica Neue', sans-serif;
+  --f-body: 'Barlow', system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0E151B; --surface: #17212A; --ink: #E8EFF4; --muted: #93A4B2; --line: #2A3845;
+    --water: #0A1117; --land: #1A252E; --road: #2DBB85; --road-todo: #5A6C7A;
+    --sign: #0B6A47; --sign-ink: #FFFFFF; --marker: #FFC21A; --marker-ink: #14202A;
+    --board: #0A1015; --seam: rgba(0, 0, 0, 0.6); --danger: #F0857A;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0E151B; --surface: #17212A; --ink: #E8EFF4; --muted: #93A4B2; --line: #2A3845;
+  --water: #0A1117; --land: #1A252E; --road: #2DBB85; --road-todo: #5A6C7A;
+  --sign: #0B6A47; --sign-ink: #FFFFFF; --marker: #FFC21A; --marker-ink: #14202A;
+  --board: #0A1015; --seam: rgba(0, 0, 0, 0.6); --danger: #F0857A;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink);
+  font-family: var(--f-body); font-size: 16px; line-height: 1.4;
+  padding-inline: 16px; padding-block: 16px 28px;
+}
+button, label.btn { font: inherit; }
+.wrap { max-width: 760px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+h1 { margin: 0; font: 700 32px/1 var(--f-disp); letter-spacing: 0.02em; text-transform: uppercase; text-wrap: balance; }
+.sub { margin: 4px 0 0; color: var(--muted); font-size: 15px; }
+
+/* Guide sign */
+.sign { background: var(--sign); color: var(--sign-ink); border-radius: 10px; padding: 4px; }
+.sign-in { border: 2px solid rgba(255, 255, 255, 0.92); border-radius: 7px; padding: 12px 14px; display: grid; gap: 10px; }
+.srow { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 12px; }
+.srow + .srow { border-top: 1px solid rgba(255, 255, 255, 0.35); padding-top: 10px; }
+.slabel { display: block; font: 600 13px/1.2 var(--f-disp); letter-spacing: 0.14em; text-transform: uppercase; opacity: 0.85; }
+.scity { font: 700 32px/1 var(--f-disp); text-wrap: balance; }
+.smi { font: 700 32px/1 var(--f-disp); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.smi small { font-size: 16px; letter-spacing: 0.06em; margin-left: 3px; }
+
+/* Map */
+.mapcard { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--water); }
+#mapSvg { display: block; width: 100%; height: auto; }
+.m-water { fill: var(--water); }
+.m-land { fill: var(--land); stroke: var(--line); stroke-width: 1.5; stroke-linejoin: round; }
+.m-todo { fill: none; stroke: var(--road-todo); stroke-width: 4; stroke-dasharray: 2 9; stroke-linecap: round; stroke-linejoin: round; }
+.m-done { fill: none; stroke: var(--road); stroke-width: 6; stroke-linecap: round; stroke-linejoin: round; }
+.m-stop { fill: var(--surface); stroke: var(--road-todo); stroke-width: 2.5; }
+.m-stop.hit { fill: var(--road); stroke: var(--surface); }
+.m-lab { font: 600 16px var(--f-body); fill: var(--ink); paint-order: stroke; stroke: var(--land); stroke-width: 4px; stroke-linejoin: round; }
+.m-halo { fill: var(--marker); opacity: 0.35; }
+.m-mark { fill: var(--marker); stroke: var(--marker-ink); stroke-width: 2.5; }
+
+.trip { margin: 0; color: var(--muted); font-size: 15px; font-variant-numeric: tabular-nums; }
+.trip b { color: var(--ink); font-weight: 600; }
+
+/* Buttons */
+.actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.btn { appearance: none; border: 1.5px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 8px; padding: 10px 16px; min-height: 44px; cursor: pointer; font-weight: 600; display: inline-flex; align-items: center; justify-content: center; }
+.btn:hover { border-color: var(--muted); }
+.btn.primary { background: var(--sign); border-color: var(--sign); color: var(--sign-ink); font: 700 22px/1 var(--f-disp); letter-spacing: 0.04em; text-transform: uppercase; padding-inline: 22px; }
+.btn.primary:hover { filter: brightness(1.12); }
+.btn.ghost { background: transparent; }
+.btn.small { min-height: 36px; padding: 6px 12px; font-size: 14px; }
+.btn:focus-visible, .linkbtn:focus-visible, #photoIn:focus-visible + label { outline: 3px solid var(--marker); outline-offset: 2px; }
+.linkbtn { appearance: none; background: none; border: 0; padding: 6px 0; color: var(--muted); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; font-size: 14px; }
+.filein { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; }
+
+/* Route log */
+.logh { margin: 8px 0 0; font: 600 14px var(--f-disp); letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
+.log { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--line); }
+.log li { display: grid; grid-template-columns: 76px minmax(0, 1fr) auto; gap: 8px; align-items: baseline; padding: 9px 0; border-bottom: 1px solid var(--line); color: var(--muted); font-size: 15px; }
+.log .mm { font: 600 15px var(--f-body); font-variant-numeric: tabular-nums; }
+.log .city { color: var(--ink); }
+.log .st { font-size: 13px; }
+.log li.hit .city { font-weight: 600; }
+.log li.hit .st { color: var(--road); font-weight: 600; }
+.log li.next .city { font-weight: 600; }
+.log li.next .st { color: var(--ink); }
+
+/* Game */
+.gbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.hud { display: flex; gap: 14px; font: 700 24px/1 var(--f-disp); font-variant-numeric: tabular-nums; letter-spacing: 0.03em; }
+.hud span:last-child { color: var(--muted); }
+.cap { margin: 0; text-align: center; color: var(--muted); font-size: 14px; }
+#board { position: relative; margin: 0 auto; background: var(--board); border-radius: 6px; overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none; }
+.p { position: absolute; left: 0; top: 0; width: var(--cw); height: var(--ch); transition: transform 0.18s ease; cursor: grab; touch-action: none; -webkit-user-select: none; user-select: none; }
+.p canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; pointer-events: none; }
+.p .e { position: absolute; inset: 0; pointer-events: none; border: 2px solid var(--seam); }
+.p.bt .e { border-top-color: transparent; }
+.p.br .e { border-right-color: transparent; }
+.p.bb .e { border-bottom-color: transparent; }
+.p.bl .e { border-left-color: transparent; }
+.p.lift { transition: none; cursor: grabbing; --seam: var(--marker); }
+.p.rise { z-index: 20; }
+.p.snap .e { animation: snap 0.6s ease-out; }
+@keyframes snap { 0% { box-shadow: inset 0 0 0 4px var(--marker); } 100% { box-shadow: inset 0 0 0 0 transparent; } }
+.g { position: absolute; left: 0; top: 0; width: var(--cw); height: var(--ch); border: 2px dashed var(--marker); background: rgba(244, 180, 0, 0.2); pointer-events: none; z-index: 5; }
+.g.bad { border-color: var(--danger); background: rgba(194, 59, 46, 0.28); }
+.hint { margin: 0; text-align: center; color: var(--muted); font-size: 14px; min-height: 2.8em; text-wrap: balance; }
+.hint.bad { color: var(--danger); font-weight: 600; }
+
+/* Win dialog */
+.win { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: 16px; background: rgba(8, 14, 18, 0.62); }
+.wcard { width: min(420px, 100%); background: var(--surface); border-radius: 12px; overflow: hidden; border: 1px solid var(--line); }
+.whead { background: var(--sign); color: var(--sign-ink); padding: 14px 18px; }
+.whead .slabel { margin-bottom: 4px; }
+.whead .big { font: 700 44px/1 var(--f-disp); font-variant-numeric: tabular-nums; }
+.wbody { padding: 16px 18px 18px; display: grid; gap: 12px; }
+.wbody p { margin: 0; }
+.wstat { color: var(--muted); font-variant-numeric: tabular-nums; }
+.wact { display: flex; flex-wrap: wrap; gap: 10px; }
+
+@media (max-width: 420px) {
+  h1 { font-size: 28px; }
+  .scity, .smi { font-size: 28px; }
+  .btn.primary { flex: 1 1 100%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .p { transition: none; }
+  .p.snap .e { animation: none; }
+}
+</style>
+
+<div class="wrap" id="app">
+  <section id="mapView" class="wrap" aria-label="Trip map">
+    <header>
+      <h1>Puzzle Road Trip</h1>
+      <p class="sub">Seattle, WA to Key West, FL. Every puzzle you finish drives 100 miles.</p>
+    </header>
+    <div class="sign" aria-live="polite"><div class="sign-in" id="sign"></div></div>
+    <div class="mapcard"><svg id="mapSvg" viewBox="0 0 690 395" role="img" aria-label="Route map from Seattle to Key West"></svg></div>
+    <p class="trip" id="trip"></p>
+    <div class="actions" id="actions"></div>
+    <h2 class="logh">Route log</h2>
+    <ol class="log" id="log"></ol>
+    <div><button class="linkbtn" id="resetBtn" type="button">Reset trip</button></div>
+  </section>
+
+  <section id="gameView" class="wrap" hidden aria-label="Puzzle">
+    <div class="gbar">
+      <button class="btn small" id="backBtn" type="button">Map</button>
+      <div class="hud"><span id="timer">0:00</span><span id="moves">0 moves</span></div>
+      <button class="btn small ghost" id="newBtn" type="button">New puzzle</button>
+    </div>
+    <p class="cap" id="caption"></p>
+    <div id="board" aria-label="Puzzle board, 8 columns by 8 rows"></div>
+    <p class="hint" id="hint" aria-live="polite"></p>
+  </section>
+
+  <div class="win" id="win" hidden role="dialog" aria-modal="true" aria-labelledby="winTitle">
+    <div class="wcard">
+      <div class="whead"><span class="slabel" id="winTitle">Puzzle solved</span><div class="big" id="winMiles"></div></div>
+      <div class="wbody">
+        <p id="winLine"></p>
+        <p class="wstat" id="winStat"></p>
+        <div class="wact"><button class="btn primary" id="winMap" type="button">Back to map</button><button class="btn" id="winNext" type="button">Next puzzle</button></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="logic.js"></script>
+<script>
+(function () {
+  'use strict';
+  var P = window.PZ, COLS = P.COLS, ROWS = P.ROWS, N = P.N;
+  var STORE_J = 'puzzleRoad.journey.v1', STORE_G = 'puzzleRoad.game.v1';
+  function $(id) { return document.getElementById(id); }
+  function lsGet(k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } }
+  function lsSet(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+  function lsDel(k) { try { localStorage.removeItem(k); } catch (e) {} }
+  function fmt(n) { return Math.round(n).toLocaleString('en-US'); }
+  var reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /* ---------- Route ---------- */
+  var STOPS = [
+    { n: 'Seattle', s: 'WA', lat: 47.61, lon: -122.33, lab: [0, 26, 'middle'] },
+    { n: 'Spokane', s: 'WA', lat: 47.66, lon: -117.43 },
+    { n: 'Missoula', s: 'MT', lat: 46.87, lon: -114.00 },
+    { n: 'Billings', s: 'MT', lat: 45.78, lon: -108.50, lab: [0, -13, 'middle'] },
+    { n: 'Rapid City', s: 'SD', lat: 44.08, lon: -103.23 },
+    { n: 'Omaha', s: 'NE', lat: 41.26, lon: -95.93, lab: [-10, 20, 'end'] },
+    { n: 'St. Louis', s: 'MO', lat: 38.63, lon: -90.20 },
+    { n: 'Nashville', s: 'TN', lat: 36.16, lon: -86.78, lab: [-11, 5, 'end'] },
+    { n: 'Atlanta', s: 'GA', lat: 33.75, lon: -84.39, lab: [11, 5, 'start'] },
+    { n: 'Jacksonville', s: 'FL', lat: 30.33, lon: -81.66, lab: [11, 5, 'start'] },
+    { n: 'Orlando', s: 'FL', lat: 28.54, lon: -81.38, lab: [11, 5, 'start'] },
+    { n: 'Miami', s: 'FL', lat: 25.76, lon: -80.19, lab: [11, 5, 'start'] },
+    { n: 'Key West', s: 'FL', lat: 24.56, lon: -81.78, lab: [-11, 6, 'end'] }
+  ];
+  function X(lon) { return 15 + (lon + 125) * 11.2; }
+  function Y(lat) { return 12 + (49.8 - lat) * 14; }
+  function hav(a, b) {
+    var t = Math.PI / 180, dl = (b.lat - a.lat) * t, dn = (b.lon - a.lon) * t;
+    var x = Math.pow(Math.sin(dl / 2), 2) + Math.cos(a.lat * t) * Math.cos(b.lat * t) * Math.pow(Math.sin(dn / 2), 2);
+    return 3958.8 * 2 * Math.asin(Math.sqrt(x));
+  }
+  // Driving miles are estimated as straight-line distance x 1.2 (about right for highway routes).
+  STOPS.forEach(function (s, i) {
+    s.x = X(s.lon); s.y = Y(s.lat);
+    s.mi = i === 0 ? 0 : STOPS[i - 1].mi + Math.round(hav(STOPS[i - 1], s) * 1.2);
+  });
+  var TOTAL = STOPS[STOPS.length - 1].mi;
+
+  var OUTLINE = [[-124.7,48.4],[-123.0,49.0],[-95.15,49.0],[-94.6,48.7],[-93.0,48.6],[-91.5,48.1],[-89.6,48.0],[-90.8,47.3],[-92.1,46.8],[-90.4,46.6],[-88.0,47.4],[-87.0,46.5],[-84.9,46.8],[-84.4,46.5],[-83.9,45.9],[-83.4,45.2],[-83.9,43.9],[-82.5,43.0],[-83.1,42.3],[-83.4,41.7],[-82.7,41.5],[-81.7,41.5],[-80.5,42.0],[-79.0,42.7],[-79.0,43.3],[-76.5,43.5],[-76.3,44.2],[-75.0,45.0],[-71.5,45.0],[-70.8,45.4],[-70.0,46.7],[-69.2,47.45],[-68.3,47.35],[-67.8,47.07],[-67.8,45.7],[-67.0,44.8],[-68.5,44.2],[-70.2,43.6],[-70.7,42.9],[-70.8,42.6],[-70.0,41.8],[-71.4,41.4],[-73.7,40.9],[-74.0,40.6],[-74.1,39.7],[-74.9,38.95],[-75.1,38.4],[-75.9,37.1],[-76.0,36.9],[-75.5,35.3],[-76.5,34.7],[-77.9,33.9],[-79.0,33.3],[-80.0,32.6],[-81.1,31.9],[-81.4,30.7],[-81.3,29.8],[-80.6,28.4],[-80.0,26.8],[-80.1,25.8],[-80.4,25.2],[-81.1,25.1],[-81.8,26.1],[-82.7,27.7],[-82.8,28.9],[-83.7,29.9],[-84.3,29.9],[-85.4,29.7],[-86.5,30.4],[-88.0,30.3],[-89.4,30.2],[-89.4,29.2],[-90.2,29.1],[-91.5,29.5],[-93.8,29.7],[-94.8,29.3],[-96.5,28.3],[-97.2,27.6],[-97.4,26.0],[-98.5,26.1],[-99.5,27.5],[-100.3,28.3],[-101.4,29.8],[-102.4,29.8],[-103.1,29.0],[-104.5,29.7],[-104.9,30.6],[-106.5,31.8],[-108.2,31.8],[-108.2,31.3],[-111.1,31.3],[-114.8,32.5],[-117.1,32.5],[-117.3,33.0],[-118.4,33.8],[-119.2,34.1],[-120.6,34.5],[-121.9,36.6],[-122.5,37.8],[-123.7,39.0],[-124.4,40.4],[-124.1,41.9],[-124.5,42.8],[-124.0,44.6],[-123.9,46.2],[-124.1,46.9]];
+
+  function pointAt(m) {
+    m = Math.max(0, Math.min(TOTAL, m));
+    for (var i = 0; i < STOPS.length - 1; i++) {
+      if (m <= STOPS[i + 1].mi) {
+        var a = STOPS[i], b = STOPS[i + 1], t = (m - a.mi) / (b.mi - a.mi);
+        return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t, leg: i };
+      }
+    }
+    var l = STOPS[STOPS.length - 1];
+    return { x: l.x, y: l.y, leg: STOPS.length - 2 };
+  }
+  function pts(arr) { return arr.map(function (p) { return p[0].toFixed(1) + ',' + p[1].toFixed(1); }).join(' '); }
+
+  /* ---------- Journey state ---------- */
+  var J = (function () {
+    var s = lsGet(STORE_J);
+    return { miles: s && isFinite(s.miles) ? Math.max(0, Math.min(TOTAL, s.miles)) : 0, solved: s && isFinite(s.solved) ? s.solved : 0 };
+  })();
+  function saveJ() { lsSet(STORE_J, J); }
+
+  /* ---------- Map view ---------- */
+  var svg = $('mapSvg');
+  function buildMapStatic() {
+    var land = OUTLINE.map(function (p) { return [X(p[0]), Y(p[1])]; });
+    var all = STOPS.map(function (s) { return [s.x, s.y]; });
+    svg.innerHTML =
+      '<rect class="m-water" width="690" height="395"/>' +
+      '<polygon class="m-land" points="' + pts(land) + '"/>' +
+      '<polyline class="m-todo" points="' + pts(all) + '"/>' +
+      '<polyline class="m-done" id="mDone" points=""/>' +
+      '<g id="mStops"></g><g id="mLabs"></g><g id="mMark"></g>';
+    var stops = '', labs = '';
+    STOPS.forEach(function (s, i) {
+      stops += '<circle class="m-stop" data-i="' + i + '" cx="' + s.x.toFixed(1) + '" cy="' + s.y.toFixed(1) + '" r="5.5"/>';
+      if (s.lab) labs += '<text class="m-lab" x="' + (s.x + s.lab[0]).toFixed(1) + '" y="' + (s.y + s.lab[1]).toFixed(1) + '" text-anchor="' + s.lab[2] + '">' + s.n + '</text>';
+    });
+    $('mStops').innerHTML = stops;
+    $('mLabs').innerHTML = labs;
+  }
+  function drawProgress(m) {
+    var p = pointAt(m), done = [];
+    for (var i = 0; i <= p.leg; i++) done.push([STOPS[i].x, STOPS[i].y]);
+    done.push([p.x, p.y]);
+    $('mDone').setAttribute('points', m > 0 ? pts(done) : '');
+    var dots = $('mStops').children;
+    for (var k = 0; k < dots.length; k++) dots[k].setAttribute('class', 'm-stop' + (STOPS[k].mi <= m ? ' hit' : ''));
+    $('mMark').innerHTML = '<circle class="m-halo" cx="' + p.x.toFixed(1) + '" cy="' + p.y.toFixed(1) + '" r="15"/><circle class="m-mark" cx="' + p.x.toFixed(1) + '" cy="' + p.y.toFixed(1) + '" r="7.5"/>';
+  }
+  var animId = 0;
+  function animateTo(from, to) {
+    cancelAnimationFrame(animId);
+    if (reduceMotion || from === to) { drawProgress(to); return; }
+    var t0 = performance.now(), dur = 1300;
+    (function step(now) {
+      var t = Math.min(1, (now - t0) / dur), e = 1 - Math.pow(1 - t, 3);
+      drawProgress(from + (to - from) * e);
+      if (t < 1) animId = requestAnimationFrame(step);
+    })(t0);
+  }
+
+  function nextStop() {
+    for (var i = 0; i < STOPS.length; i++) if (STOPS[i].mi > J.miles) return STOPS[i];
+    return null;
+  }
+  var pendingResume = null; // photo puzzle kept in memory while the player looks at the map
+  function savedGame() {
+    var g = lsGet(STORE_G);
+    if (g && Array.isArray(g.grid) && g.grid.length === N && isFinite(g.seed)) {
+      var seen = {}, ok = true;
+      g.grid.forEach(function (v) { if (typeof v !== 'number' || v < 0 || v >= N || seen[v]) ok = false; seen[v] = 1; });
+      if (ok) return g;
+    }
+    return null;
+  }
+  function renderMapText() {
+    var done = J.miles >= TOTAL, nx = nextStop(), dest = STOPS[STOPS.length - 1];
+    $('sign').innerHTML = done
+      ? '<div class="srow"><div><span class="slabel">Trip complete</span><span class="scity">Key West, FL</span></div><div class="smi">' + fmt(TOTAL) + '<small>MI</small></div></div>'
+      : '<div class="srow"><div><span class="slabel">Next stop</span><span class="scity">' + nx.n + ', ' + nx.s + '</span></div><div class="smi">' + fmt(nx.mi - J.miles) + '<small>MI</small></div></div>' +
+        '<div class="srow"><div><span class="slabel">Destination</span><span class="scity">Key West, FL</span></div><div class="smi">' + fmt(TOTAL - J.miles) + '<small>MI</small></div></div>';
+    $('trip').innerHTML = '<b>' + J.solved + '</b> ' + (J.solved === 1 ? 'puzzle' : 'puzzles') + ' solved &middot; <b>' + fmt(J.miles) + '</b> miles driven &middot; <b>' + fmt(TOTAL - J.miles) + '</b> to go';
+    var html = '';
+    STOPS.forEach(function (s) {
+      var hit = s.mi <= J.miles, isNext = nx && s === nx;
+      html += '<li class="' + (hit ? 'hit' : isNext ? 'next' : '') + '"><span class="mm">Mile ' + fmt(s.mi) + '</span><span class="city">' + s.n + ', ' + s.s + '</span><span class="st">' + (hit ? 'Reached' : isNext ? 'Next' : '') + '</span></li>';
+    });
+    $('log').innerHTML = html;
+    var sg = savedGame(), canResume = !!(sg || pendingResume), a = '';
+    if (done) a = '<button class="btn primary" id="driveAgain" type="button">Drive again</button>';
+    else if (canResume) a = '<button class="btn primary" id="resumeBtn" type="button">Resume puzzle</button><button class="btn" id="startBtn" type="button">New puzzle</button>';
+    else a = '<button class="btn primary" id="startBtn" type="button">Start puzzle</button>';
+    if (!done) a += '<input class="filein" id="photoIn" type="file" accept="image/*"><label class="btn" for="photoIn">Use my own photo</label>';
+    $('actions').innerHTML = a;
+    var b;
+    if ((b = $('startBtn'))) b.onclick = function () { newGame(); };
+    if ((b = $('resumeBtn'))) b.onclick = function () { resumeGame(); };
+    if ((b = $('driveAgain'))) b.onclick = function () { J.miles = 0; J.solved = 0; saveJ(); renderMapText(); drawProgress(0); };
+    if ((b = $('photoIn'))) b.onchange = function () { if (b.files && b.files[0]) loadPhoto(b.files[0]); b.value = ''; };
+  }
+  function showMap(animateFrom) {
+    $('gameView').hidden = true; $('mapView').hidden = false;
+    renderMapText();
+    if (animateFrom != null) animateTo(animateFrom, J.miles); else drawProgress(J.miles);
+    window.scrollTo(0, 0);
+  }
+  var resetTimer = 0;
+  $('resetBtn').onclick = function () {
+    var b = $('resetBtn');
+    if (b.dataset.armed) {
+      clearTimeout(resetTimer); delete b.dataset.armed; b.textContent = 'Reset trip';
+      J.miles = 0; J.solved = 0; saveJ(); lsDel(STORE_G); pendingResume = null; G = null;
+      showMap();
+    } else {
+      b.dataset.armed = '1'; b.textContent = 'Tap again to erase your progress';
+      resetTimer = setTimeout(function () { delete b.dataset.armed; b.textContent = 'Reset trip'; }, 3500);
+    }
+  };
+
+  /* ---------- Picture generator (random scenes) ---------- */
+  var IW = 1280, IH = 1600;
+  function rng(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; var t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; };
+  function hsl(h, s, l, a) { return 'hsla(' + Math.round(((h % 360) + 360) % 360) + ',' + s + '%,' + l + '%,' + (a == null ? 1 : a) + ')'; }
+  function vgrad(g, y0, y1, stops) { var gr = g.createLinearGradient(0, y0, 0, y1); stops.forEach(function (s) { gr.addColorStop(s[0], s[1]); }); return gr; }
+  function glow(g, x, y, r, c0) { var gr = g.createRadialGradient(x, y, 0, x, y, r); gr.addColorStop(0, c0); gr.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = gr; g.fillRect(x - r, y - r, r * 2, r * 2); }
+  function ridge(g, R, base, amp, color, rough) {
+    var ph = [], fr = [], am = [], k;
+    for (k = 0; k < 5; k++) { ph.push(R() * 6.28); fr.push((0.0018 + R() * 0.0035) * (k + 1) * rough); am.push(1 / (k + 1)); }
+    function yAt(x) { var y = 0; for (var j = 0; j < 5; j++) y += am[j] * Math.sin(x * fr[j] + ph[j]); return base - amp * y / 1.8; }
+    g.beginPath(); g.moveTo(0, IH);
+    for (var x = 0; x <= IW; x += 8) g.lineTo(x, yAt(x));
+    g.lineTo(IW, IH); g.closePath(); g.fillStyle = color; g.fill();
+    return yAt;
+  }
+  function cloud(g, R, x, y, s, col) {
+    g.fillStyle = col;
+    for (var i = 0; i < 7; i++) { g.beginPath(); g.ellipse(x + (R() - 0.5) * s * 1.7, y + (R() - 0.5) * s * 0.3, s * (0.35 + R() * 0.5), s * (0.12 + R() * 0.13), 0, 0, 6.283); g.fill(); }
+  }
+  function pine(g, x, y, h, col) {
+    g.fillStyle = col; var w = h * 0.38;
+    for (var i = 0; i < 3; i++) { var t = y - h * (0.28 * i), ww = w * (1 - i * 0.2); g.beginPath(); g.moveTo(x, t - h * 0.5); g.lineTo(x - ww, t); g.lineTo(x + ww, t); g.closePath(); g.fill(); }
+    g.fillRect(x - 3, y, 6, h * 0.12);
+  }
+  function trees(g, R, yAt, col, from, to, step) {
+    for (var x = from; x < to; x += step * (0.6 + R() * 0.9)) pine(g, x, yAt(x) + 6, 55 + R() * 90, col);
+  }
+  function birds(g, R, n, y0, y1, col) {
+    g.strokeStyle = col; g.lineWidth = 4; g.lineCap = 'round';
+    for (var i = 0; i < n; i++) { var x = R() * IW, y = y0 + R() * (y1 - y0), s = 14 + R() * 18; g.beginPath(); g.moveTo(x - s, y); g.quadraticCurveTo(x - s / 2, y - s * 0.7, x, y); g.quadraticCurveTo(x + s / 2, y - s * 0.7, x + s, y); g.stroke(); }
+  }
+  function bokeh(g, R) {
+    for (var i = 0; i < 110; i++) { g.fillStyle = 'rgba(255,255,255,' + (0.04 + R() * 0.07).toFixed(3) + ')'; g.beginPath(); g.arc(R() * IW, R() * IH, 3 + R() * 14, 0, 6.283); g.fill(); }
+  }
+  var SCENES = ['Sunset Ridge', 'Night Sky', 'Desert Dunes', 'Open Sea'];
+  function makeScene(seed) {
+    var cv = document.createElement('canvas'); cv.width = IW; cv.height = IH;
+    var g = cv.getContext('2d'), R = rng(seed), kind = Math.floor(R() * 4), i, h, yAt;
+    if (kind === 0) {
+      h = [350, 8, 22, 300, 15][Math.floor(R() * 5)];
+      g.fillStyle = vgrad(g, 0, IH * 0.66, [[0, hsl(h + 250, 45, 22)], [0.5, hsl(h + 335, 60, 46)], [1, hsl(h + 20, 90, 70)]]); g.fillRect(0, 0, IW, IH);
+      var sx = IW * (0.22 + 0.56 * R());
+      glow(g, sx, IH * 0.54, 560, hsl(h + 30, 100, 80, 0.9));
+      g.fillStyle = hsl(h + 40, 100, 90); g.beginPath(); g.arc(sx, IH * 0.54, 96, 0, 6.283); g.fill();
+      for (i = 0; i < 7; i++) cloud(g, R, R() * IW, IH * (0.08 + R() * 0.38), 110 + R() * 150, hsl(h + 10, 70, 82, 0.28 + R() * 0.2));
+      birds(g, R, 8, IH * 0.15, IH * 0.46, hsl(h, 30, 16, 0.75));
+      var bases = [0.60, 0.68, 0.76, 0.84, 0.94], amps = [90, 110, 130, 150, 170], ys = [];
+      for (i = 0; i < 5; i++) ys.push(ridge(g, R, IH * bases[i], amps[i], hsl(h + 270, 30, 58 - i * 10), 0.7 + i * 0.3));
+      trees(g, R, ys[3], hsl(h + 270, 35, 14), 20, IW, 46);
+      trees(g, R, ys[4], hsl(h + 270, 40, 8), 10, IW, 38);
+    } else if (kind === 1) {
+      g.fillStyle = vgrad(g, 0, IH, [[0, hsl(232, 60, 7)], [0.6, hsl(240 + R() * 30, 55, 17)], [1, hsl(212, 50, 30)]]); g.fillRect(0, 0, IW, IH);
+      for (i = 0; i < 460; i++) { g.fillStyle = 'rgba(255,255,255,' + (0.35 + R() * 0.65).toFixed(2) + ')'; g.beginPath(); g.arc(R() * IW, R() * IH * 0.72, 0.8 + R() * 2.4, 0, 6.283); g.fill(); }
+      for (i = 0; i < 26; i++) glow(g, R() * IW, R() * IH * 0.6, 26 + R() * 20, 'rgba(255,255,255,0.8)');
+      for (var b = 0; b < 2; b++) {
+        var by = IH * (0.3 + b * 0.14 + R() * 0.05), ph = R() * 6, ah = 130 + R() * 50;
+        g.beginPath(); g.moveTo(0, IH * 0.75);
+        for (var x = 0; x <= IW; x += 10) g.lineTo(x, by + Math.sin(x * 0.004 + ph) * 90 + Math.sin(x * 0.011 + ph * 2) * 30);
+        g.lineTo(IW, IH * 0.75); g.closePath();
+        g.fillStyle = vgrad(g, by - 120, by + 260, [[0, hsl(ah, 80, 60, 0)], [0.35, hsl(ah, 85, 58, 0.34)], [1, hsl(ah, 80, 55, 0)]]); g.fill();
+      }
+      var mx = IW * (0.2 + 0.6 * R()), my = IH * (0.14 + 0.1 * R());
+      glow(g, mx, my, 300, 'rgba(230,236,255,0.5)');
+      g.fillStyle = hsl(52, 28, 90); g.beginPath(); g.arc(mx, my, 84, 0, 6.283); g.fill();
+      for (i = 0; i < 6; i++) { g.fillStyle = 'rgba(120,125,140,0.28)'; g.beginPath(); g.arc(mx + (R() - 0.5) * 100, my + (R() - 0.5) * 100, 6 + R() * 14, 0, 6.283); g.fill(); }
+      var y1 = ridge(g, R, IH * 0.72, 120, hsl(228, 38, 14), 0.8), y2 = ridge(g, R, IH * 0.82, 130, hsl(228, 40, 9), 1.1), y3 = ridge(g, R, IH * 0.93, 150, hsl(228, 45, 5), 1.5);
+      trees(g, R, y2, hsl(228, 45, 6), 20, IW, 44); trees(g, R, y3, hsl(228, 50, 3), 10, IW, 36);
+    } else if (kind === 2) {
+      g.fillStyle = vgrad(g, 0, IH * 0.62, [[0, hsl(200, 70, 68)], [0.6, hsl(38, 90, 82)], [1, hsl(26, 95, 78)]]); g.fillRect(0, 0, IW, IH);
+      var dx = IW * (0.2 + 0.6 * R());
+      glow(g, dx, IH * 0.36, 460, 'rgba(255,245,200,0.95)');
+      g.fillStyle = 'rgba(255,252,235,1)'; g.beginPath(); g.arc(dx, IH * 0.36, 88, 0, 6.283); g.fill();
+      for (i = 0; i < 5; i++) cloud(g, R, R() * IW, IH * (0.06 + R() * 0.3), 150 + R() * 170, 'rgba(255,255,255,' + (0.2 + R() * 0.2).toFixed(2) + ')');
+      for (i = 0; i < 3; i++) {
+        var mxx = IW * (0.1 + i * 0.32 + R() * 0.1), mw = 180 + R() * 160, mh = 110 + R() * 90, base = IH * 0.58;
+        g.fillStyle = hsl(14, 48, 48 - i * 4); g.beginPath(); g.moveTo(mxx - mw, base); g.lineTo(mxx - mw * 0.7, base - mh); g.lineTo(mxx + mw * 0.7, base - mh); g.lineTo(mxx + mw, base); g.closePath(); g.fill();
+      }
+      var dys = [], dbase = [0.60, 0.68, 0.76, 0.85, 0.95], damp = [40, 60, 80, 100, 120];
+      for (i = 0; i < 5; i++) dys.push(ridge(g, R, IH * dbase[i], damp[i], hsl(32 - i * 3, 68, 76 - i * 8), 0.5 + i * 0.25));
+      g.lineCap = 'round'; g.lineJoin = 'round';
+      for (i = 0; i < 4; i++) {
+        var cx = 90 + R() * (IW - 180), layer = 3 + (i % 2), cy = dys[layer](cx) + 4, ch = 150 + R() * 140, cw = 40 + R() * 30, sc = 0.7 + layer * 0.15;
+        g.strokeStyle = hsl(128, 38, 20 + R() * 6); g.lineWidth = 24 * sc;
+        g.beginPath(); g.moveTo(cx, cy); g.lineTo(cx, cy - ch * sc); g.stroke();
+        g.lineWidth = 18 * sc;
+        g.beginPath(); g.moveTo(cx, cy - ch * sc * 0.45); g.lineTo(cx - cw * sc, cy - ch * sc * 0.45); g.lineTo(cx - cw * sc, cy - ch * sc * 0.72); g.stroke();
+        g.beginPath(); g.moveTo(cx, cy - ch * sc * 0.58); g.lineTo(cx + cw * sc, cy - ch * sc * 0.58); g.lineTo(cx + cw * sc, cy - ch * sc * 0.84); g.stroke();
+      }
+      for (i = 0; i < 9; i++) { var rx = R() * IW, ry = dys[4](rx) + 14 + R() * 30; g.fillStyle = hsl(22, 35, 28 + R() * 10); g.beginPath(); g.ellipse(rx, ry, 18 + R() * 30, 9 + R() * 12, 0, 0, 6.283); g.fill(); }
+    } else {
+      var hz = IH * 0.5, ox = IW * (0.2 + 0.6 * R());
+      g.fillStyle = vgrad(g, 0, hz, [[0, hsl(208, 72, 52)], [0.7, hsl(196, 78, 76)], [1, hsl(42, 92, 86)]]); g.fillRect(0, 0, IW, hz);
+      glow(g, ox, hz - 20, 460, 'rgba(255,240,190,0.9)');
+      g.fillStyle = 'rgba(255,250,225,1)'; g.beginPath(); g.arc(ox, hz - 30, 82, 0, 6.283); g.fill();
+      for (i = 0; i < 6; i++) cloud(g, R, R() * IW, IH * (0.06 + R() * 0.3), 120 + R() * 170, 'rgba(255,255,255,' + (0.35 + R() * 0.3).toFixed(2) + ')');
+      g.fillStyle = vgrad(g, hz, IH, [[0, hsl(198, 70, 46)], [1, hsl(216, 72, 15)]]); g.fillRect(0, hz, IW, IH - hz);
+      g.fillStyle = hsl(205, 30, 38); g.beginPath(); var ix = R() * IW * 0.8 + 100; g.moveTo(ix - 160, hz + 2); g.quadraticCurveTo(ix - 60, hz - 54, ix + 30, hz - 20); g.quadraticCurveTo(ix + 90, hz - 40, ix + 170, hz + 2); g.closePath(); g.fill();
+      g.lineCap = 'round';
+      for (i = 0; i < 190; i++) {
+        var t = Math.pow(R(), 1.4), wy = hz + 10 + t * (IH - hz - 10), wl = 24 + t * 200 * (0.5 + R()), wx = R() * IW;
+        g.strokeStyle = 'rgba(255,255,255,' + (0.08 + R() * 0.2).toFixed(2) + ')'; g.lineWidth = 2 + t * 5;
+        g.beginPath(); g.moveTo(wx, wy); g.quadraticCurveTo(wx + wl / 2, wy - 6 - t * 14, wx + wl, wy); g.stroke();
+      }
+      for (i = 0; i < 70; i++) { var gt = R(), gy = hz + 12 + gt * (IH - hz) * 0.7, gw = 20 + gt * 160 * R(); g.strokeStyle = 'rgba(255,248,215,' + (0.25 + R() * 0.5).toFixed(2) + ')'; g.lineWidth = 3 + gt * 5; g.beginPath(); g.moveTo(ox - gw / 2 + (R() - 0.5) * 30, gy); g.lineTo(ox + gw / 2 + (R() - 0.5) * 30, gy); g.stroke(); }
+      var bx = IW * (0.15 + R() * 0.55), by2 = IH * 0.74, bs = 1 + R() * 0.5;
+      g.fillStyle = 'rgba(250,250,250,0.97)'; g.beginPath(); g.moveTo(bx, by2 - 170 * bs); g.lineTo(bx + 100 * bs, by2 - 14 * bs); g.lineTo(bx, by2 - 14 * bs); g.closePath(); g.fill();
+      g.fillStyle = 'rgba(235,238,242,0.97)'; g.beginPath(); g.moveTo(bx - 8 * bs, by2 - 140 * bs); g.lineTo(bx - 84 * bs, by2 - 14 * bs); g.lineTo(bx - 8 * bs, by2 - 14 * bs); g.closePath(); g.fill();
+      g.fillStyle = hsl(12, 55, 28); g.beginPath(); g.moveTo(bx - 110 * bs, by2 - 10 * bs); g.lineTo(bx + 120 * bs, by2 - 10 * bs); g.lineTo(bx + 84 * bs, by2 + 24 * bs); g.lineTo(bx - 78 * bs, by2 + 24 * bs); g.closePath(); g.fill();
+      birds(g, R, 6, IH * 0.12, IH * 0.4, 'rgba(255,255,255,0.9)');
+    }
+    bokeh(g, R);
+    return { canvas: cv, name: SCENES[kind] };
+  }
+
+  /* ---------- Game ---------- */
+  var G = null, drag = null, board = $('board'), hintTimer = 0;
+  function setHint(msg, bad) {
+    var h = $('hint'); clearTimeout(hintTimer);
+    h.textContent = msg || 'Drag a piece onto another to swap them. Pieces that fit together lock and move as one.';
+    h.className = 'hint' + (msg && bad ? ' bad' : '');
+    if (msg) hintTimer = setTimeout(function () { setHint(''); }, 3200);
+  }
+  function fmtTime(ms) {
+    var s = Math.floor(ms / 1000), m = Math.floor(s / 60), hr = Math.floor(m / 60);
+    return hr ? hr + ':' + ('0' + (m % 60)).slice(-2) + ':' + ('0' + (s % 60)).slice(-2) : m + ':' + ('0' + (s % 60)).slice(-2);
+  }
+  function updateHud() {
+    if (!G) return;
+    $('timer').textContent = fmtTime(G.elapsed);
+    $('moves').textContent = G.moves + (G.moves === 1 ? ' move' : ' moves');
+  }
+  function saveGame() {
+    if (!G || G.solved || G.kind !== 'scene') return;
+    lsSet(STORE_G, { seed: G.seed, grid: G.grid, moves: G.moves, elapsed: Math.round(G.elapsed) });
+  }
+  function cleanSlate() { lsDel(STORE_G); pendingResume = null; }
+
+  function openGame(g) {
+    G = g;
+    $('mapView').hidden = true; $('gameView').hidden = false;
+    $('caption').textContent = G.name + (G.kind === 'photo' ? ' (your photo, not saved if you close the page)' : '') + ' · 100 miles to earn';
+    buildBoard(); layout(); render(); updateHud(); setHint('');
+    G.last = performance.now();
+    window.scrollTo(0, 0);
+  }
+  function buildBoard() {
+    board.innerHTML = ''; G.els = [];
+    for (var id = 0; id < N; id++) {
+      var r = Math.floor(id / COLS), c = id % COLS;
+      var el = document.createElement('div'); el.className = 'p'; el.dataset.id = id;
+      var cv = document.createElement('canvas'); cv.width = 160; cv.height = 200;
+      cv.getContext('2d').drawImage(G.img, c * 160, r * 200, 160, 200, 0, 0, 160, 200);
+      var e = document.createElement('div'); e.className = 'e';
+      el.appendChild(cv); el.appendChild(e); board.appendChild(el); G.els.push(el);
+    }
+  }
+  function layout() {
+    if (!G) return;
+    var availW = Math.min(document.documentElement.clientWidth - 32, 560);
+    var availH = Math.max(window.innerHeight - 210, 300);
+    G.cw = Math.max(20, Math.floor(Math.min(availW / COLS, availH / (ROWS * 1.25))));
+    G.ch = Math.round(G.cw * 1.25);
+    board.style.width = G.cw * COLS + 'px'; board.style.height = G.ch * ROWS + 'px';
+    board.style.setProperty('--cw', G.cw + 'px'); board.style.setProperty('--ch', G.ch + 'px');
+  }
+  function render() {
+    for (var i = 0; i < N; i++) {
+      var el = G.els[G.grid[i]], b = P.sideBonds(G.grid, i);
+      el.style.transform = 'translate(' + (i % COLS) * G.cw + 'px,' + Math.floor(i / COLS) * G.ch + 'px)';
+      el.classList.toggle('bt', b.t); el.classList.toggle('br', b.r); el.classList.toggle('bb', b.b); el.classList.toggle('bl', b.l);
+    }
+  }
+  function newGame(photoCanvas) {
+    cleanSlate();
+    var seed = Math.floor(Math.random() * 2147483647), img, name, kind;
+    if (photoCanvas) { img = photoCanvas; name = 'Your photo'; kind = 'photo'; }
+    else { var sc = makeScene(seed); img = sc.canvas; name = sc.name; kind = 'scene'; }
+    var grid = P.shuffle(rng(seed ^ 0x9e3779b9));
+    openGame({ seed: seed, kind: kind, name: name, img: img, grid: grid, moves: 0, elapsed: 0, solved: false });
+    saveGame();
+  }
+  function resumeGame() {
+    if (pendingResume) { var pg = pendingResume; pendingResume = null; openGame(pg); return; }
+    var s = savedGame();
+    if (!s) { newGame(); return; }
+    var sc = makeScene(s.seed);
+    openGame({ seed: s.seed, kind: 'scene', name: sc.name, img: sc.canvas, grid: s.grid.slice(), moves: s.moves || 0, elapsed: s.elapsed || 0, solved: false });
+  }
+  function loadPhoto(file) {
+    var url = URL.createObjectURL(file), im = new Image();
+    im.onload = function () {
+      var cv = document.createElement('canvas'); cv.width = IW; cv.height = IH;
+      var s = Math.max(IW / im.naturalWidth, IH / im.naturalHeight), w = im.naturalWidth * s, h = im.naturalHeight * s;
+      cv.getContext('2d').drawImage(im, (IW - w) / 2, (IH - h) / 2, w, h);
+      URL.revokeObjectURL(url);
+      newGame(cv);
+    };
+    im.onerror = function () { URL.revokeObjectURL(url); };
+    im.src = url;
+  }
+
+  /* Dragging */
+  function clearGhosts() { if (!drag) return; drag.ghosts.forEach(function (n) { if (n.parentNode) n.parentNode.removeChild(n); }); drag.ghosts = []; }
+  function updateGhost() {
+    clearGhosts();
+    if (!drag.dr && !drag.dc) { drag.plan = null; return; }
+    var plan = P.planMove(G.grid, drag.cells, drag.dr, drag.dc), delta = drag.dr * COLS + drag.dc;
+    drag.plan = plan;
+    drag.cells.forEach(function (c) {
+      var n = c + delta, d = document.createElement('div');
+      d.className = 'g' + (plan.blocked ? ' bad' : '');
+      d.style.transform = 'translate(' + (n % COLS) * G.cw + 'px,' + Math.floor(n / COLS) * G.ch + 'px)';
+      board.appendChild(d); drag.ghosts.push(d);
+    });
+  }
+  board.addEventListener('pointerdown', function (e) {
+    if (!G || G.solved || drag || (e.button != null && e.button > 0)) return;
+    var el = e.target.closest ? e.target.closest('.p') : null;
+    if (!el) return;
+    var cell = G.grid.indexOf(+el.dataset.id), cells = P.clusterOf(G.grid, cell);
+    drag = { pid: e.pointerId, x0: e.clientX, y0: e.clientY, cells: cells, dr: 0, dc: 0, plan: null, ghosts: [] };
+    cells.forEach(function (c) { G.els[G.grid[c]].classList.add('lift', 'rise'); });
+    try { board.setPointerCapture(e.pointerId); } catch (err) {}
+    e.preventDefault();
+  });
+  board.addEventListener('pointermove', function (e) {
+    if (!drag || e.pointerId !== drag.pid) return;
+    var dx = e.clientX - drag.x0, dy = e.clientY - drag.y0;
+    drag.cells.forEach(function (c) {
+      G.els[G.grid[c]].style.transform = 'translate(' + ((c % COLS) * G.cw + dx) + 'px,' + (Math.floor(c / COLS) * G.ch + dy) + 'px)';
+    });
+    var off = P.clampOffset(drag.cells, Math.round(dy / G.ch), Math.round(dx / G.cw));
+    if (off[0] !== drag.dr || off[1] !== drag.dc) { drag.dr = off[0]; drag.dc = off[1]; updateGhost(); }
+  });
+  function endDrag(e) {
+    if (!drag || e.pointerId !== drag.pid) return;
+    var d = drag, lifted = d.cells.map(function (c) { return G.els[G.grid[c]]; });
+    clearGhosts(); drag = null;
+    try { board.releasePointerCapture(e.pointerId); } catch (err) {}
+    var plan = (e.type !== 'pointercancel' && (d.dr || d.dc)) ? P.planMove(G.grid, d.cells, d.dr, d.dc) : null;
+    lifted.forEach(function (el) { el.classList.remove('lift'); });
+    void board.offsetWidth;
+    if (plan && plan.changed) {
+      var before = {}, i;
+      for (i = 0; i < N; i++) before[G.grid[i]] = P.bondCount(G.grid, i);
+      G.grid = plan.newGrid; G.moves++;
+      render(); updateHud(); saveGame();
+      for (i = 0; i < N; i++) {
+        var pid = G.grid[i];
+        if (P.bondCount(G.grid, i) > before[pid]) {
+          (function (el) { el.classList.remove('snap'); void el.offsetWidth; el.classList.add('snap'); setTimeout(function () { el.classList.remove('snap'); }, 700); })(G.els[pid]);
+        }
+      }
+      if (P.isSolved(G.grid)) onSolved();
+    } else {
+      if (plan && plan.blocked) setHint('That would split a locked set and there is no room to move it. Try a different spot.', true);
+      render();
+    }
+    setTimeout(function () { lifted.forEach(function (el) { el.classList.remove('rise'); }); }, 260);
+  }
+  board.addEventListener('pointerup', endDrag);
+  board.addEventListener('pointercancel', endDrag);
+
+  /* Timer */
+  setInterval(function () {
+    var now = performance.now();
+    if (G && !G.solved && !$('gameView').hidden && !document.hidden) { G.elapsed += now - (G.last || now); updateHud(); }
+    if (G) G.last = now;
+  }, 250);
+  setInterval(saveGame, 5000);
+  document.addEventListener('visibilitychange', function () { if (document.hidden) saveGame(); });
+  window.addEventListener('pagehide', saveGame);
+  window.addEventListener('resize', function () { if (G && !$('gameView').hidden) { layout(); render(); } });
+
+  /* Win */
+  var lastBefore = 0;
+  function onSolved() {
+    G.solved = true; lsDel(STORE_G);
+    var before = J.miles, add = Math.min(100, TOTAL - before);
+    J.miles = before + add; J.solved++; saveJ(); lastBefore = before;
+    var reached = STOPS.filter(function (s) { return s.mi > before && s.mi <= J.miles; });
+    var finished = J.miles >= TOTAL;
+    setTimeout(function () {
+      $('winMiles').textContent = '+' + fmt(add) + ' miles';
+      $('winLine').textContent = finished ? 'Key West. You made it, ' + fmt(TOTAL) + ' miles from Seattle.'
+        : reached.length ? 'You reached ' + reached.map(function (s) { return s.n + ', ' + s.s; }).join(' and ') + '.'
+        : fmt(nextStop().mi - J.miles) + ' miles to ' + nextStop().n + ', ' + nextStop().s + '.';
+      $('winStat').textContent = fmtTime(G.elapsed) + ' · ' + G.moves + (G.moves === 1 ? ' move' : ' moves') + ' · ' + fmt(TOTAL - J.miles) + ' miles to Key West';
+      $('winNext').hidden = finished;
+      $('win').hidden = false;
+      $('winMap').focus();
+    }, 600);
+  }
+  $('winMap').onclick = function () { $('win').hidden = true; showMap(lastBefore); G = null; };
+  $('winNext').onclick = function () { $('win').hidden = true; newGame(); };
+
+  /* Game bar */
+  $('backBtn').onclick = function () {
+    if (G && !G.solved) { saveGame(); if (G.kind === 'photo') pendingResume = G; }
+    showMap();
+  };
+  var newTimer = 0;
+  $('newBtn').onclick = function () {
+    var b = $('newBtn');
+    if (b.dataset.armed) { clearTimeout(newTimer); delete b.dataset.armed; b.textContent = 'New puzzle'; newGame(G && G.kind === 'photo' ? null : undefined); }
+    else {
+      b.dataset.armed = '1'; b.textContent = 'Tap again to discard this one';
+      newTimer = setTimeout(function () { delete b.dataset.armed; b.textContent = 'New puzzle'; }, 3000);
+    }
+  };
+
+  buildMapStatic();
+  showMap();
+})();
+</script>
+
+</body>
+</html>
