@@ -2,7 +2,7 @@
 
 An 8x8 portrait-piece photo puzzle. Each solved puzzle drives 100 miles along a route from Seattle to Key West (about 3,527 miles, 36 puzzles).
 
-- Finish Seattle to Key West to unlock four more trips on the same US map: Route 66, Pacific Coast, Coast to Coast and the Appalachians. Pick from the trip menu; each trip keeps its own progress. "Reset all progress" clears everything.
+- Finish Seattle to Key West to unlock ten more trips on the same US map: Route 66, Pacific Coast, Coast to Coast, the Appalachians, the Great Lakes Circuit, the Gulf Coast, Red Rock Country, the Mississippi River Trail, a New England Loop and Texas Hill Country. Pick from the trip menu; each trip keeps its own progress. "Reset all progress" clears everything. 100 stops across all 11 trips.
 - Drop a piece on another to swap them.
 - Pieces that fit together lock and move as one. Locked sets never split.
 - Timer, move counter and progress save in the browser (localStorage).
