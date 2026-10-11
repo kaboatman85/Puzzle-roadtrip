@@ -142,6 +142,10 @@ h1 { margin: 0; font: 700 32px/1 var(--f-disp); letter-spacing: 0.02em; text-tra
 .wstat { color: var(--muted); font-variant-numeric: tabular-nums; }
 .wact { display: flex; flex-wrap: wrap; gap: 10px; }
 
+.toast { position: fixed; left: 50%; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); z-index: 60; background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 8px; font-size: 14px; max-width: calc(100% - 32px); text-align: center; }
+body.busy .btn { opacity: 0.55; pointer-events: none; }
+body.busy #board { pointer-events: none; }
+
 @media (max-width: 420px) {
   h1 { font-size: 28px; }
   .scity, .smi { font-size: 28px; }
@@ -190,6 +194,8 @@ h1 { margin: 0; font: 700 32px/1 var(--f-disp); letter-spacing: 0.02em; text-tra
     </div>
   </div>
 </div>
+
+<div class="toast" id="toast" hidden role="status"></div>
 
 <script src="logic.js"></script>
 <script>
@@ -486,15 +492,22 @@ h1 { margin: 0; font: 700 32px/1 var(--f-disp); letter-spacing: 0.02em; text-tra
     $('moves').textContent = G.moves + (G.moves === 1 ? ' move' : ' moves');
   }
   function saveGame() {
-    if (!G || G.solved || G.kind !== 'scene') return;
-    lsSet(STORE_G, { seed: G.seed, grid: G.grid, moves: G.moves, elapsed: Math.round(G.elapsed) });
+    if (!G || G.solved || G.kind === 'photo') return;
+    lsSet(STORE_G, { kind: G.kind, seed: G.seed, grid: G.grid, moves: G.moves, elapsed: Math.round(G.elapsed) });
   }
   function cleanSlate() { lsDel(STORE_G); pendingResume = null; }
 
+  function updateCaption() {
+    if (!G) return;
+    var base = G.kind === 'photo' ? 'Your photo (not saved if you close the page)'
+      : G.kind === 'picsum' ? 'Photo' + (G.credit ? ' by ' + G.credit : '') + ' via Lorem Picsum'
+      : G.name + ' (generated scene)';
+    $('caption').textContent = base + ' · 100 miles to earn';
+  }
   function openGame(g) {
     G = g;
     $('mapView').hidden = true; $('gameView').hidden = false;
-    $('caption').textContent = G.name + (G.kind === 'photo' ? ' (your photo, not saved if you close the page)' : '') + ' · 100 miles to earn';
+    updateCaption();
     buildBoard(); layout(); render(); updateHud(); setHint('');
     G.last = performance.now();
     window.scrollTo(0, 0);
@@ -526,21 +539,82 @@ h1 { margin: 0; font: 700 32px/1 var(--f-disp); letter-spacing: 0.02em; text-tra
       el.classList.toggle('bt', b.t); el.classList.toggle('br', b.r); el.classList.toggle('bb', b.b); el.classList.toggle('bl', b.l);
     }
   }
-  function newGame(photoCanvas) {
+  /* ---------- Photos (Lorem Picsum) ---------- */
+  var busy = false, toastTimer = 0;
+  function showToast(msg, ms) {
+    var el = $('toast'); clearTimeout(toastTimer);
+    el.textContent = msg; el.hidden = false;
+    if (ms) toastTimer = setTimeout(function () { el.hidden = true; }, ms);
+  }
+  function setBusy(on, msg) {
+    busy = on; document.body.classList.toggle('busy', on);
+    if (on) showToast(msg); else { clearTimeout(toastTimer); $('toast').hidden = true; }
+  }
+  // The image is drawn without a CORS request, so the canvas is "tainted" but still works for cutting pieces.
+  function fetchPicsum(seed, done) {
+    var im = new Image(), finished = false, to = 0;
+    function end(cv) { if (finished) return; finished = true; clearTimeout(to); done(cv); }
+    im.onload = function () {
+      try {
+        var cv = document.createElement('canvas'); cv.width = IW; cv.height = IH;
+        cv.getContext('2d').drawImage(im, 0, 0, IW, IH);
+        end(cv);
+      } catch (e) { end(null); }
+    };
+    im.onerror = function () { end(null); };
+    to = setTimeout(function () { end(null); }, 12000);
+    im.src = 'https://picsum.photos/seed/pr' + seed + '/1280/1600.jpg';
+  }
+  function fetchCredit(seed) {
+    try {
+      fetch('https://picsum.photos/seed/pr' + seed + '/info')
+        .then(function (r) { return r.json(); })
+        .then(function (j) { if (j && j.author && G && G.seed === seed && G.kind === 'picsum') { G.credit = String(j.author); updateCaption(); } })
+        .catch(function () {});
+    } catch (e) {}
+  }
+  function begin(seed, kind, img, name) {
     cleanSlate();
-    var seed = Math.floor(Math.random() * 2147483647), img, name, kind;
-    if (photoCanvas) { img = photoCanvas; name = 'Your photo'; kind = 'photo'; }
-    else { var sc = makeScene(seed); img = sc.canvas; name = sc.name; kind = 'scene'; }
     var grid = P.shuffle(rng(seed ^ 0x9e3779b9));
     openGame({ seed: seed, kind: kind, name: name, img: img, grid: grid, moves: 0, elapsed: 0, solved: false });
     saveGame();
+    if (kind === 'picsum') fetchCredit(seed);
+  }
+  function newGame(photoCanvas) {
+    if (busy) return;
+    var seed = Math.floor(Math.random() * 2147483647);
+    if (photoCanvas) { begin(seed, 'photo', photoCanvas, 'Your photo'); return; }
+    setBusy(true, 'Loading a new photo...');
+    fetchPicsum(seed, function (cv) {
+      setBusy(false);
+      if (cv) { begin(seed, 'picsum', cv, 'Photo'); return; }
+      var sc = makeScene(seed);
+      begin(seed, 'scene', sc.canvas, sc.name);
+      showToast('Could not load a photo, so this puzzle uses a generated scene.', 4500);
+    });
   }
   function resumeGame() {
+    if (busy) return;
     if (pendingResume) { var pg = pendingResume; pendingResume = null; openGame(pg); return; }
     var s = savedGame();
     if (!s) { newGame(); return; }
-    var sc = makeScene(s.seed);
-    openGame({ seed: s.seed, kind: 'scene', name: sc.name, img: sc.canvas, grid: s.grid.slice(), moves: s.moves || 0, elapsed: s.elapsed || 0, solved: false });
+    function go(img, kind, name) {
+      openGame({ seed: s.seed, kind: kind, name: name, img: img, grid: s.grid.slice(), moves: s.moves || 0, elapsed: s.elapsed || 0, solved: false });
+      if (kind === 'picsum') fetchCredit(s.seed);
+    }
+    if (s.kind === 'picsum') {
+      setBusy(true, 'Loading your photo...');
+      fetchPicsum(s.seed, function (cv) {
+        setBusy(false);
+        if (cv) { go(cv, 'picsum', 'Photo'); return; }
+        var sc = makeScene(s.seed);
+        go(sc.canvas, 'scene', sc.name);
+        showToast('Could not reload your photo, so the board continues with a generated scene.', 4500);
+      });
+    } else {
+      var sc2 = makeScene(s.seed);
+      go(sc2.canvas, 'scene', sc2.name);
+    }
   }
   function loadPhoto(file) {
     var url = URL.createObjectURL(file), im = new Image();
@@ -658,7 +732,7 @@ h1 { margin: 0; font: 700 32px/1 var(--f-disp); letter-spacing: 0.02em; text-tra
   var newTimer = 0;
   $('newBtn').onclick = function () {
     var b = $('newBtn');
-    if (b.dataset.armed) { clearTimeout(newTimer); delete b.dataset.armed; b.textContent = 'New puzzle'; newGame(G && G.kind === 'photo' ? null : undefined); }
+    if (b.dataset.armed) { clearTimeout(newTimer); delete b.dataset.armed; b.textContent = 'New puzzle'; newGame(); }
     else {
       b.dataset.armed = '1'; b.textContent = 'Tap again to discard this one';
       newTimer = setTimeout(function () { delete b.dataset.armed; b.textContent = 'New puzzle'; }, 3000);
