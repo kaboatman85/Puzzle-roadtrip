@@ -11,9 +11,10 @@ An 8x8 portrait-piece photo puzzle. Each solved puzzle drives 100 miles along a 
 - Photos get a mild contrast and saturation boost on browsers that support canvas filters.
 - If a photo cannot load within 12 seconds, the puzzle uses a generated scene instead.
 - "Use my own photo" lets you pick a picture from your device (not saved if you close the page).
+- Installable as a PWA: "Add to Home Screen" (iOS/Android) or the install icon in a desktop browser puts it on your device like an app, and the core page works offline after the first visit.
 
 ## Run
-Open `index.html` in a browser, or serve the folder with any static host (GitHub Pages works as is).
+Open `index.html` in a browser, or serve the folder with any static host (GitHub Pages works as is). The install prompt and offline support need the page served over `http(s)://` (service workers don't run from a `file://` URL).
 
 ## Test
 `node test_logic.js` checks the puzzle rules (shuffle, locking, swaps, cluster moves, solvability).
@@ -22,6 +23,9 @@ Open `index.html` in a browser, or serve the folder with any static host (GitHub
 - `index.html`: the page, styles and UI code
 - `logic.js`: puzzle rules, no DOM
 - `test_logic.js`: rule tests
+- `manifest.json`: PWA metadata (name, icons, theme color, display mode)
+- `sw.js`: service worker that caches the app shell for offline use
+- `icons/`: app icons used by the manifest and `apple-touch-icon`
 
 ## Next
 Optional: Unsplash for themed photos (needs an API key and credit to the photographer).
