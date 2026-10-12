@@ -915,7 +915,7 @@ body.busy #board { pointer-events: none; }
         } catch (e) { end(null); }
       };
       im.onerror = function () { end(null); };
-      to = setTimeout(function () { end(null, true); }, 6000);
+      to = setTimeout(function () { end(null, true); }, 8000);
       im.src = info.thumbUrl;
     }
     attempt(true, function (r, timedOut) {
@@ -1000,6 +1000,26 @@ body.busy #board { pointer-events: none; }
       withPicsum('Could not load ' + theme.name.toLowerCase() + ' photos, so this puzzle uses a random photo instead.');
     });
   }
+  function withTimeout(promise, ms) {
+    return new Promise(function (resolve, reject) {
+      var settled = false;
+      var t = setTimeout(function () { if (!settled) { settled = true; reject(new Error('timeout')); } }, ms);
+      promise.then(
+        function (v) { if (!settled) { settled = true; clearTimeout(t); resolve(v); } },
+        function (e) { if (!settled) { settled = true; clearTimeout(t); reject(e); } }
+      );
+    });
+  }
+  // Resuming deserves more persistence than picking a fresh photo: the player already has
+  // moves and time invested in this exact picture, and returning after a while away often
+  // means the device's network is still waking up (Wi-Fi reconnecting, etc.) right when the
+  // first attempt runs. Retries the whole attempt a couple of times before giving up.
+  function retrying(attemptFn, tries, delayMs, done) {
+    attemptFn(function (r) {
+      if (r || tries <= 1) { done(r); return; }
+      setTimeout(function () { retrying(attemptFn, tries - 1, delayMs, done); }, delayMs);
+    });
+  }
   function resumeGame() {
     if (busy) return;
     var s = savedGame();
@@ -1016,22 +1036,24 @@ body.busy #board { pointer-events: none; }
     if (s.kind === 'commons') {
       setBusy(true, 'Loading your photo...');
       var theme = T.theme;
-      Promise.resolve().then(function () { return commonsImageInfo([s.title]); }).then(function (infoByTitle) {
+      retrying(function (cb) {
+        withTimeout(commonsImageInfo([s.title]), 8000).then(function (infoByTitle) {
+          var info = infoByTitle[s.title];
+          if (!info) { cb(null); return; }
+          loadCommonsImage(info, function (r) { cb(r ? { r: r, info: info } : null); });
+        }).catch(function () { cb(null); });
+      }, 2, 1500, function (result) {
         setBusy(false);
-        var info = infoByTitle[s.title];
-        if (!info) { fallbackScene(); return; }
-        loadCommonsImage(info, function (r) {
-          if (!r) { fallbackScene(); return; }
-          openGame({
-            seed: s.seed, kind: 'commons', img: r.canvas, grid: s.grid.slice(), moves: s.moves || 0, elapsed: s.elapsed || 0, solved: false,
-            detail: r.score ? r.score.score : null, title: info.displayTitle, pageUrl: info.pageUrl, author: info.author,
-            license: info.license, licenseUrl: info.licenseUrl, themeName: theme ? theme.name : '', themeEmoji: theme ? theme.emoji : ''
-          });
+        if (!result) { fallbackScene(); return; }
+        openGame({
+          seed: s.seed, kind: 'commons', img: result.r.canvas, grid: s.grid.slice(), moves: s.moves || 0, elapsed: s.elapsed || 0, solved: false,
+          detail: result.r.score ? result.r.score.score : null, title: result.info.displayTitle, pageUrl: result.info.pageUrl, author: result.info.author,
+          license: result.info.license, licenseUrl: result.info.licenseUrl, themeName: theme ? theme.name : '', themeEmoji: theme ? theme.emoji : ''
         });
-      }).catch(function () { setBusy(false); fallbackScene(); });
+      });
     } else if (s.kind === 'picsum') {
       setBusy(true, 'Loading your photo...');
-      loadPicsum(s.seed, function (r) {
+      retrying(function (cb) { loadPicsum(s.seed, cb); }, 2, 1500, function (r) {
         setBusy(false);
         if (r) { go(r.canvas, 'picsum', 'Photo', r.score ? r.score.score : null); return; }
         fallbackScene();

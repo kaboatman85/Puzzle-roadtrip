@@ -213,6 +213,39 @@ test('resume loads the exact same file that was saved', async function () {
   } finally { dom.window.close(); }
 });
 
+test('resume survives a transient failure (fails once, then succeeds on retry)', async function () {
+  var savedTitle = 'File:LincolnMemorial2.jpg';
+  var journey = { solved: 1, current: 'sea-key', trips: { 'sea-key': { miles: 100, done: false } } };
+  var commonsCalls = 0;
+  var dom = buildDom({
+    fetchImpl: function (url) {
+      if (isCommonsUrl(url)) {
+        commonsCalls++;
+        if (commonsCalls === 1) return Promise.reject(new Error('transient network hiccup'));
+        return commonsFetchOk(url);
+      }
+      return Promise.reject(new Error('unexpected fetch: ' + url));
+    },
+    beforeMain: function (window) {
+      window.localStorage.setItem('puzzleRoad.journey.v1', JSON.stringify(journey));
+      window.localStorage.setItem('puzzleRoad.game.v1', JSON.stringify({
+        kind: 'commons', seed: 555, grid: Array.from({ length: 64 }, function (_, i) { return i; }),
+        moves: 4, elapsed: 500, title: savedTitle
+      }));
+    }
+  });
+  try {
+    var window = dom.window, document = window.document;
+    var resumeBtn = await waitFor(function () { return document.getElementById('resumeBtn'); });
+    resumeBtn.click();
+    await waitFor(function () { return !document.getElementById('gameView').hidden; }, 6000);
+    var saved = JSON.parse(window.localStorage.getItem('puzzleRoad.game.v1'));
+    assert.strictEqual(saved.kind, 'commons', 'should recover the real photo, not fall back to a scene');
+    assert.strictEqual(saved.title, savedTitle);
+    assert(commonsCalls > 1, 'should have actually retried after the first failure');
+  } finally { dom.window.close(); }
+});
+
 test('Commons failure falls back to Picsum', async function () {
   var dom = buildDom({
     fetchImpl: function (url) {
