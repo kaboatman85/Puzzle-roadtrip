@@ -11,7 +11,6 @@ An 8x8 portrait-piece photo puzzle. Each solved puzzle drives 100 miles along a 
 - If Commons is slow or unreachable, the puzzle falls back to a random photo from [Lorem Picsum](https://picsum.photos) (no theme, no API key); if that also fails, it falls back to a generated scene. A toast names whichever fallback was used. The exact photo (or its seed, for Picsum/scene) is saved, so Resume brings back the same picture.
 - Photos get a mild contrast and saturation boost on browsers that support canvas filters.
 - If no photo loads within about 12 seconds total across the fallback chain, the puzzle uses a generated scene instead.
-- "Use my own photo" lets you pick a picture from your device (skips theming; not saved if you close the page).
 - Installable as a PWA: "Add to Home Screen" (iOS/Android) or the install icon in a desktop browser puts it on your device like an app, and the core page works offline after the first visit.
 
 ## Themes

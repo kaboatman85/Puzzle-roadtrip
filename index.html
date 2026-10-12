@@ -104,9 +104,8 @@ h1 { margin: 0; font: 700 32px/1 var(--f-disp); letter-spacing: 0.02em; text-tra
 .btn.primary:hover { filter: brightness(1.12); }
 .btn.ghost { background: transparent; }
 .btn.small { min-height: 36px; padding: 6px 12px; font-size: 14px; }
-.btn:focus-visible, .linkbtn:focus-visible, #photoIn:focus-visible + label { outline: 3px solid var(--marker); outline-offset: 2px; }
+.btn:focus-visible, .linkbtn:focus-visible { outline: 3px solid var(--marker); outline-offset: 2px; }
 .linkbtn { appearance: none; background: none; border: 0; padding: 6px 0; color: var(--muted); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; font-size: 14px; }
-.filein { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; }
 
 /* Route log */
 .logh { margin: 8px 0 0; font: 600 14px var(--f-disp); letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
@@ -146,11 +145,10 @@ h1 { margin: 0; font: 700 32px/1 var(--f-disp); letter-spacing: 0.02em; text-tra
 .win { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: 16px; background: rgba(8, 14, 18, 0.62); }
 .wcard { width: min(420px, 100%); background: var(--surface); border-radius: 12px; overflow: hidden; border: 1px solid var(--line); }
 .whead { background: var(--sign); color: var(--sign-ink); padding: 14px 18px; }
-.whead .slabel { margin-bottom: 4px; }
-.whead .big { font: 700 44px/1 var(--f-disp); font-variant-numeric: tabular-nums; }
 .wbody { padding: 16px 18px 18px; display: grid; gap: 12px; }
 .wbody p { margin: 0; }
 .wstat { color: var(--muted); font-variant-numeric: tabular-nums; }
+.wphoto { width: 100%; border-radius: 8px; display: block; }
 .wact { display: flex; flex-wrap: wrap; gap: 10px; }
 
 .toast { position: fixed; left: 50%; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); z-index: 60; background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 8px; font-size: 14px; max-width: calc(100% - 32px); text-align: center; }
@@ -221,11 +219,12 @@ body.busy #board { pointer-events: none; }
 
   <div class="win" id="win" hidden role="dialog" aria-modal="true" aria-labelledby="winTitle">
     <div class="wcard">
-      <div class="whead"><span class="slabel" id="winTitle">Puzzle solved</span><div class="big" id="winMiles"></div></div>
+      <div class="whead"><span class="slabel" id="winTitle">Puzzle solved</span></div>
       <div class="wbody">
         <p id="winLine"></p>
         <p class="wstat" id="winStat"></p>
-        <div class="wact"><button class="btn primary" id="winTrips" type="button" hidden>Choose next trip</button><button class="btn primary" id="winMap" type="button">Back to map</button><button class="btn" id="winNext" type="button">Next puzzle</button></div>
+        <img class="wphoto" id="winPhoto" hidden alt="The photo you just solved">
+        <div class="wact"><button class="btn primary" id="winTrips" type="button" hidden>Choose next trip</button><button class="btn primary" id="winMap" type="button">Back to map</button><button class="btn" id="winNext" type="button">Next puzzle</button><button class="btn ghost" id="winView" type="button">View puzzle</button></div>
       </div>
     </div>
   </div>
@@ -532,7 +531,6 @@ body.busy #board { pointer-events: none; }
     for (var i = 0; i < STOPS.length; i++) if (STOPS[i].mi > m) return STOPS[i];
     return null;
   }
-  var pendingResume = null; // photo puzzle kept in memory while the player looks at the map
   function savedGame() {
     var g = lsGet(STORE_G);
     if (g && Array.isArray(g.grid) && g.grid.length === N && isFinite(g.seed)) {
@@ -560,11 +558,10 @@ body.busy #board { pointer-events: none; }
       html += '<li class="' + (hit ? 'hit' : isNext ? 'next' : '') + '"><span class="mm">Mile ' + fmt(s.mi) + '</span><span class="city">' + s.n + ', ' + s.s + '</span><span class="st">' + (hit ? 'Reached' : isNext ? 'Next' : '') + '</span></li>';
     });
     $('log').innerHTML = html;
-    var sg = savedGame(), canResume = !!(sg || pendingResume), a = '';
+    var sg = savedGame(), canResume = !!sg, a = '';
     if (done) a = (first ? '<button class="btn primary" id="tripsBtn" type="button">Choose next trip</button>' : '') + '<button class="btn' + (first ? '' : ' primary') + '" id="driveAgain" type="button">Drive again</button>';
     else if (canResume) a = '<button class="btn primary" id="resumeBtn" type="button">Resume puzzle</button><button class="btn" id="startBtn" type="button">New puzzle</button>';
     else a = '<button class="btn primary" id="startBtn" type="button">Start puzzle</button>';
-    if (!done) a += '<input class="filein" id="photoIn" type="file" accept="image/*"><label class="btn" for="photoIn">Use my own photo</label>';
     if (!done && first) a += '<button class="btn" id="tripsBtn" type="button">All trips</button>';
     $('actions').innerHTML = a;
     var b;
@@ -572,7 +569,6 @@ body.busy #board { pointer-events: none; }
     if ((b = $('resumeBtn'))) b.onclick = function () { resumeGame(); };
     if ((b = $('tripsBtn'))) b.onclick = function () { showTrips(); };
     if ((b = $('driveAgain'))) b.onclick = function () { cur().miles = 0; saveJ(); renderMapText(); drawProgress(0); };
-    if ((b = $('photoIn'))) b.onchange = function () { if (b.files && b.files[0]) loadPhoto(b.files[0]); b.value = ''; };
   }
   function hideViews() { $('gameView').hidden = true; $('mapView').hidden = true; $('tripView').hidden = true; }
   function showMap(animateFrom) {
@@ -614,7 +610,7 @@ body.busy #board { pointer-events: none; }
     if (b.dataset.armed) {
       clearTimeout(resetTimer); delete b.dataset.armed; b.textContent = 'Reset all progress';
       TRIPS.forEach(function (tr) { J.trips[tr.id] = { miles: 0, done: false }; });
-      J.solved = 0; setTrip(TRIPS[0].id); saveJ(); lsDel(STORE_G); pendingResume = null; G = null;
+      J.solved = 0; setTrip(TRIPS[0].id); saveJ(); lsDel(STORE_G); G = null;
       showMap();
     } else {
       b.dataset.armed = '1'; b.textContent = 'Tap again to erase all trips';
@@ -754,12 +750,12 @@ body.busy #board { pointer-events: none; }
     $('moves').textContent = G.moves + (G.moves === 1 ? ' move' : ' moves');
   }
   function saveGame() {
-    if (!G || G.solved || G.kind === 'photo') return;
+    if (!G || G.solved) return;
     var rec = { kind: G.kind, seed: G.seed, grid: G.grid, moves: G.moves, elapsed: Math.round(G.elapsed) };
     if (G.kind === 'commons') rec.title = G.title;
     lsSet(STORE_G, rec);
   }
-  function cleanSlate() { lsDel(STORE_G); pendingResume = null; }
+  function cleanSlate() { lsDel(STORE_G); }
 
   // Commons author/title/license text is wiki-contributed and goes into innerHTML (for the
   // attribution link), so it is escaped here even though commons.js already strips tags.
@@ -777,8 +773,7 @@ body.busy #board { pointer-events: none; }
         (G.detail != null ? ' &middot; detail ' + G.detail + '/10' : '') + ' &middot; 100 miles to earn';
       return;
     }
-    var base = G.kind === 'photo' ? 'Your photo (not saved if you close the page)'
-      : G.kind === 'picsum' ? 'Photo' + (G.credit ? ' by ' + G.credit : '') + ' via Lorem Picsum' + (G.detail != null ? ' · detail ' + G.detail + '/10' : '')
+    var base = G.kind === 'picsum' ? 'Photo' + (G.credit ? ' by ' + G.credit : '') + ' via Lorem Picsum' + (G.detail != null ? ' · detail ' + G.detail + '/10' : '')
       : G.name + ' (generated scene)';
     $('caption').textContent = base + ' · 100 miles to earn';
   }
@@ -980,10 +975,9 @@ body.busy #board { pointer-events: none; }
     });
     saveGame();
   }
-  function newGame(photoCanvas) {
+  function newGame() {
     if (busy) return;
     var seed = Math.floor(Math.random() * 2147483647);
-    if (photoCanvas) { begin(seed, 'photo', photoCanvas, 'Your photo'); return; }
     var theme = T.theme;
     function withPicsum(toastMsg) {
       setBusy(true, 'Picking a photo...');
@@ -1010,7 +1004,6 @@ body.busy #board { pointer-events: none; }
   }
   function resumeGame() {
     if (busy) return;
-    if (pendingResume) { var pg = pendingResume; pendingResume = null; openGame(pg); return; }
     var s = savedGame();
     if (!s) { newGame(); return; }
     function go(img, kind, name, detail) {
@@ -1050,19 +1043,6 @@ body.busy #board { pointer-events: none; }
       go(sc2.canvas, 'scene', sc2.name);
     }
   }
-  function loadPhoto(file) {
-    var url = URL.createObjectURL(file), im = new Image();
-    im.onload = function () {
-      var cv = document.createElement('canvas'); cv.width = IW; cv.height = IH;
-      var s = Math.max(IW / im.naturalWidth, IH / im.naturalHeight), w = im.naturalWidth * s, h = im.naturalHeight * s;
-      cv.getContext('2d').drawImage(im, (IW - w) / 2, (IH - h) / 2, w, h);
-      URL.revokeObjectURL(url);
-      newGame(cv);
-    };
-    im.onerror = function () { URL.revokeObjectURL(url); };
-    im.src = url;
-  }
-
   /* Dragging */
   function clearGhosts() { if (!drag) return; drag.ghosts.forEach(function (n) { if (n.parentNode) n.parentNode.removeChild(n); }); drag.ghosts = []; }
   function updateGhost() {
@@ -1160,7 +1140,6 @@ body.busy #board { pointer-events: none; }
     var dest = STOPS[STOPS.length - 1];
     setTimeout(function () {
       $('winTitle').textContent = finished ? 'Trip complete' : 'Puzzle solved';
-      $('winMiles').textContent = '+' + fmt(add) + ' miles';
       $('winLine').textContent = finished
         ? 'You made it to ' + T.to + ', ' + fmt(TOTAL) + ' miles from ' + T.from + '.' + (firstUnlock ? ' ' + (TRIPS.length - 1) + ' new trips are unlocked.' : '')
         : reached.length ? 'You reached ' + reached.map(function (s) { return s.n + ', ' + s.s; }).join(' and ') + '.'
@@ -1169,6 +1148,7 @@ body.busy #board { pointer-events: none; }
       $('winNext').hidden = finished;
       $('winTrips').hidden = !more;
       $('winMap').className = more ? 'btn' : 'btn primary';
+      $('winPhoto').hidden = true; $('winPhoto').src = ''; $('winView').textContent = 'View puzzle';
       $('win').hidden = false;
       (more ? $('winTrips') : $('winMap')).focus();
     }, 600);
@@ -1176,10 +1156,19 @@ body.busy #board { pointer-events: none; }
   $('winMap').onclick = function () { $('win').hidden = true; showMap(lastBefore); G = null; };
   $('winNext').onclick = function () { $('win').hidden = true; newGame(); };
   $('winTrips').onclick = function () { $('win').hidden = true; G = null; showTrips(); };
+  $('winView').onclick = function () {
+    var img = $('winPhoto');
+    if (img.hidden) {
+      if (!img.src && G && G.img) img.src = G.img.toDataURL('image/jpeg', 0.85);
+      img.hidden = false; $('winView').textContent = 'Hide puzzle';
+    } else {
+      img.hidden = true; $('winView').textContent = 'View puzzle';
+    }
+  };
 
   /* Game bar */
   $('backBtn').onclick = function () {
-    if (G && !G.solved) { saveGame(); if (G.kind === 'photo') pendingResume = G; }
+    if (G && !G.solved) saveGame();
     showMap();
   };
   var newTimer = 0;
