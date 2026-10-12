@@ -985,7 +985,16 @@ body.busy #board { pointer-events: none; }
     if (G) G.last = now;
   }, 250);
   setInterval(saveGame, 5000);
-  document.addEventListener('visibilitychange', function () { if (document.hidden) saveGame(); });
+  // Installed/home-screen apps get suspended when backgrounded and can come back showing a
+  // frozen paint of whatever was on screen before (e.g. an older mile count), even though the
+  // saved progress itself is correct. Re-render the visible view with current data when the
+  // app is restored from that state so the map never looks stuck.
+  function refreshVisibleView() {
+    if (!$('mapView').hidden) showMap();
+    else if (!$('gameView').hidden && G) updateHud();
+  }
+  document.addEventListener('visibilitychange', function () { if (document.hidden) saveGame(); else refreshVisibleView(); });
+  window.addEventListener('pageshow', function (e) { if (e.persisted) refreshVisibleView(); });
   window.addEventListener('pagehide', saveGame);
   window.addEventListener('resize', function () { if (G && !$('gameView').hidden) { layout(); render(); } });
 
