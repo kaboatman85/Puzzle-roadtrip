@@ -1148,7 +1148,7 @@ body.busy #board { pointer-events: none; }
       $('winNext').hidden = finished;
       $('winTrips').hidden = !more;
       $('winMap').className = more ? 'btn' : 'btn primary';
-      $('winPhoto').hidden = true; $('winPhoto').src = ''; $('winView').textContent = 'View puzzle';
+      $('winPhoto').hidden = true; $('winPhoto').removeAttribute('src'); $('winView').textContent = 'View puzzle';
       $('win').hidden = false;
       (more ? $('winTrips') : $('winMap')).focus();
     }, 600);
@@ -1159,7 +1159,7 @@ body.busy #board { pointer-events: none; }
   $('winView').onclick = function () {
     var img = $('winPhoto');
     if (img.hidden) {
-      if (!img.src && G && G.img) img.src = G.img.toDataURL('image/jpeg', 0.85);
+      if (!img.getAttribute('src') && G && G.img) img.src = G.img.toDataURL('image/jpeg', 0.85);
       img.hidden = false; $('winView').textContent = 'Hide puzzle';
     } else {
       img.hidden = true; $('winView').textContent = 'View puzzle';
