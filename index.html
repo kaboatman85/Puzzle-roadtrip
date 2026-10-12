@@ -750,7 +750,7 @@ body.busy #board { pointer-events: none; }
   function saveGame() {
     if (!G || G.solved) return;
     var rec = { kind: G.kind, seed: G.seed, grid: G.grid, moves: G.moves, elapsed: Math.round(G.elapsed) };
-    if (G.kind === 'commons') rec.title = G.title;
+    if (G.kind === 'commons') rec.title = G.fileTitle;
     lsSet(STORE_G, rec);
   }
   function cleanSlate() { lsDel(STORE_G); }
@@ -967,7 +967,7 @@ body.busy #board { pointer-events: none; }
     openGame({
       seed: seed, kind: 'commons', img: picked.canvas, grid: grid, moves: 0, elapsed: 0, solved: false,
       detail: picked.score ? picked.score.score : null,
-      title: picked.info.displayTitle, pageUrl: picked.info.pageUrl,
+      title: picked.info.displayTitle, fileTitle: picked.info.title, pageUrl: picked.info.pageUrl,
       author: picked.info.author, license: picked.info.license, licenseUrl: picked.info.licenseUrl,
       themeName: theme.name, themeEmoji: theme.emoji
     });
@@ -1047,7 +1047,7 @@ body.busy #board { pointer-events: none; }
         if (!result) { fallbackScene(); return; }
         openGame({
           seed: s.seed, kind: 'commons', img: result.r.canvas, grid: s.grid.slice(), moves: s.moves || 0, elapsed: s.elapsed || 0, solved: false,
-          detail: result.r.score ? result.r.score.score : null, title: result.info.displayTitle, pageUrl: result.info.pageUrl, author: result.info.author,
+          detail: result.r.score ? result.r.score.score : null, title: result.info.displayTitle, fileTitle: result.info.title, pageUrl: result.info.pageUrl, author: result.info.author,
           license: result.info.license, licenseUrl: result.info.licenseUrl, themeName: theme ? theme.name : '', themeEmoji: theme ? theme.emoji : ''
         });
       });

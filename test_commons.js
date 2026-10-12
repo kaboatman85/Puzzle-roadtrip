@@ -179,8 +179,35 @@ test('themed load: solving the flow produces a commons-kind save with title/auth
     assert.ok(/href="https:\/\/commons\.wikimedia\.org\/wiki\//.test(caption), 'caption should link to the Commons file page: ' + caption);
     var saved = JSON.parse(window.localStorage.getItem('puzzleRoad.game.v1'));
     assert.strictEqual(saved.kind, 'commons');
-    assert.ok(typeof saved.title === 'string' && saved.title.length > 0, 'save should include the exact file title');
+    // Must be the full MediaWiki title ("File:Name.jpg"), not the display-stripped version --
+    // that's what a Commons imageinfo lookup needs to resolve the file again on Resume.
+    assert.ok(typeof saved.title === 'string' && saved.title.indexOf('File:') === 0, 'saved title should be the full API title, got: ' + saved.title);
     assert.strictEqual(saved.grid.length, 64);
+  } finally { dom.window.close(); }
+});
+
+test('full round trip: a themed load, saved via Map, resumes to the same file (not a scene)', async function () {
+  var dom = buildDom({
+    fetchImpl: function (url) {
+      if (isCommonsUrl(url)) return commonsFetchOk(url);
+      return Promise.reject(new Error('unexpected fetch: ' + url));
+    }
+  });
+  try {
+    var window = dom.window, document = window.document;
+    var startBtn = await waitFor(function () { return document.getElementById('startBtn'); });
+    startBtn.click();
+    await waitFor(function () { return !document.getElementById('gameView').hidden; }, 4000);
+    var captionBefore = document.getElementById('caption').innerHTML;
+    document.getElementById('backBtn').click(); // triggers saveGame() via the real UI path
+    await new Promise(function (r) { setTimeout(r, 50); });
+    var resumeBtn = await waitFor(function () { return document.getElementById('resumeBtn'); });
+    resumeBtn.click();
+    await waitFor(function () { return !document.getElementById('gameView').hidden; }, 4000);
+    var captionAfter = document.getElementById('caption').innerHTML;
+    var saved = JSON.parse(window.localStorage.getItem('puzzleRoad.game.v1'));
+    assert.strictEqual(saved.kind, 'commons', 'should resume the real photo, not fall back to a scene');
+    assert.strictEqual(captionAfter, captionBefore, 'resumed caption should match the original exactly');
   } finally { dom.window.close(); }
 });
 
