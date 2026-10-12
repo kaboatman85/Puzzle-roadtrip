@@ -168,7 +168,6 @@ body.busy #board { pointer-events: none; }
 .tbar i { display: block; height: 100%; background: var(--road); }
 .tstat { font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .tripcard.done .tstat { color: var(--road); }
-.teaser { display: block; margin-top: 4px; color: var(--ink); }
 
 @media (max-width: 420px) {
   h1 { font-size: 28px; }
@@ -550,8 +549,7 @@ body.busy #board { pointer-events: none; }
       : '<div class="srow"><div><span class="slabel">Next stop</span><span class="scity">' + nx.n + ', ' + nx.s + '</span></div><div class="smi">' + fmt(nx.mi - miles) + '<small>MI</small></div></div>' +
         '<div class="srow"><div><span class="slabel">Destination</span><span class="scity">' + T.to + '</span></div><div class="smi">' + fmt(TOTAL - miles) + '<small>MI</small></div></div>';
     var stopsVisited = STOPS.filter(function (s) { return s.mi <= miles; }).length;
-    $('trip').innerHTML = '<b>' + stopsVisited + '</b> ' + (stopsVisited === 1 ? 'stop' : 'stops') + ' visited &middot; <b>' + fmt(TOTAL - miles) + '</b> miles left on this trip' +
-      (first ? '' : '<span class="teaser">Finish this trip to unlock ' + (TRIPS.length - 1) + ' more.</span>');
+    $('trip').innerHTML = '<b>' + stopsVisited + '</b> ' + (stopsVisited === 1 ? 'stop' : 'stops') + ' visited &middot; <b>' + fmt(TOTAL - miles) + '</b> miles left on this trip';
     var html = '';
     STOPS.forEach(function (s) {
       var hit = s.mi <= miles, isNext = nx && s === nx;
