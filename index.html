@@ -551,7 +551,8 @@ body.busy #board { pointer-events: none; }
       ? '<div class="srow"><div><span class="slabel">Trip complete</span><span class="scity">' + T.to + '</span></div><div class="smi">' + fmt(TOTAL) + '<small>MI</small></div></div>'
       : '<div class="srow"><div><span class="slabel">Next stop</span><span class="scity">' + nx.n + ', ' + nx.s + '</span></div><div class="smi">' + fmt(nx.mi - miles) + '<small>MI</small></div></div>' +
         '<div class="srow"><div><span class="slabel">Destination</span><span class="scity">' + T.to + '</span></div><div class="smi">' + fmt(TOTAL - miles) + '<small>MI</small></div></div>';
-    $('trip').innerHTML = '<b>' + J.solved + '</b> ' + (J.solved === 1 ? 'puzzle' : 'puzzles') + ' solved in all &middot; <b>' + fmt(miles) + '</b> miles driven on this trip &middot; <b>' + fmt(TOTAL - miles) + '</b> to go' +
+    var stopsVisited = STOPS.filter(function (s) { return s.mi <= miles; }).length;
+    $('trip').innerHTML = '<b>' + stopsVisited + '</b> ' + (stopsVisited === 1 ? 'stop' : 'stops') + ' visited &middot; <b>' + fmt(TOTAL - miles) + '</b> miles left on this trip' +
       (first ? '' : '<span class="teaser">Finish this trip to unlock ' + (TRIPS.length - 1) + ' more.</span>');
     var html = '';
     STOPS.forEach(function (s) {
