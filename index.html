@@ -545,7 +545,7 @@ body.busy #board { pointer-events: none; }
   }
   function renderMapText() {
     var c = cur(), miles = c.miles, done = miles >= TOTAL, nx = nextStop(), first = J.trips[TRIPS[0].id].done;
-    $('sub').textContent = T.from + ' to ' + T.to + '. Every puzzle you finish drives 100 miles.';
+    $('sub').textContent = T.from + ' to ' + T.to + '. Every puzzle you finish gets you to your next stop on your roadtrip.';
     $('themeLine').textContent = T.theme ? T.theme.emoji + ' Theme: ' + T.theme.name : '';
     $('sign').innerHTML = done
       ? '<div class="srow"><div><span class="slabel">Trip complete</span><span class="scity">' + T.to + '</span></div><div class="smi">' + fmt(TOTAL) + '<small>MI</small></div></div>'
