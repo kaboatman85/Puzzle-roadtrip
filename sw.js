@@ -1,5 +1,5 @@
 'use strict';
-var CACHE = 'puzzle-road-trip-v2';
+var CACHE = 'puzzle-road-trip-v3';
 var ASSETS = ['./', './index.html', './logic.js', './themes.js', './commons.js', './manifest.json', './icons/icon-192.png', './icons/icon-512.png'];
 
 self.addEventListener('install', function (e) {
