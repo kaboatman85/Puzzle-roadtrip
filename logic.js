@@ -115,8 +115,9 @@
   }
 
   /* Move a cluster by (dr, dc) cells. Whatever it lands on is relocated into the space it
-     leaves behind. Locked sets travel whole, so a locked set never splits. If the displaced
-     sets cannot be fitted into that space, the move is refused (blocked). */
+     leaves behind, traveling whole as a locked set when it fits. If a bumped locked set has
+     nowhere to land as one piece, it splits apart instead of refusing the move -- each of its
+     pieces drops into its own nearest free cell. */
   function planMove(grid, cells, dr, dc) {
     var o = clampOffset(cells, dr, dc);
     dr = o[0]; dc = o[1];
@@ -155,11 +156,30 @@
 
     units.sort(function (a, b) { return b.cells.length - a.cells.length; });
     var placed = pack(units, free);
-    if (!placed) return { dr: dr, dc: dc, newGrid: grid.slice(), blocked: true, changed: false };
-    units.forEach(function (u, idx) {
-      var sh = placed[idx][0] * COLS + placed[idx][1];
-      u.cells.forEach(function (x) { ng[x + sh] = grid[x]; });
-    });
+    if (placed) {
+      units.forEach(function (u, idx) {
+        var sh = placed[idx][0] * COLS + placed[idx][1];
+        u.cells.forEach(function (x) { ng[x + sh] = grid[x]; });
+      });
+    } else {
+      // No way to relocate the bumped locked sets as whole shapes: split them apart instead
+      // of refusing the move, each displaced piece going to its own nearest free cell (same
+      // idea as the loose-pieces case above). `free` can repeat a cell when the dragged piece's
+      // own vacated spot overlaps a bumped unit's footprint, so dedupe before checking there is
+      // truly enough room -- if there genuinely is not (e.g. the whole board is one locked
+      // picture already), refuse the move rather than lose or duplicate a piece.
+      var loose = [];
+      units.forEach(function (u) { u.cells.forEach(function (x) { loose.push(x); }); });
+      var freeSeen = {}, freeUniq = [];
+      free.forEach(function (x) { if (!freeSeen[x]) { freeSeen[x] = 1; freeUniq.push(x); } });
+      if (freeUniq.length < loose.length) return { dr: dr, dc: dc, newGrid: grid.slice(), blocked: true, changed: false };
+      var pairs2 = [], usedD2 = {}, usedV2 = {};
+      loose.forEach(function (d) { freeUniq.forEach(function (v) { pairs2.push([dist(d, v), d, v]); }); });
+      pairs2.sort(function (a, b) { return a[0] - b[0] || a[1] - b[1] || a[2] - b[2]; });
+      pairs2.forEach(function (p) {
+        if (!usedD2[p[1]] && !usedV2[p[2]]) { usedD2[p[1]] = 1; usedV2[p[2]] = 1; ng[p[2]] = grid[p[1]]; }
+      });
+    }
     return { dr: dr, dc: dc, newGrid: ng, blocked: false, changed: true };
   }
 

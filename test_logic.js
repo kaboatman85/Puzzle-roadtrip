@@ -45,9 +45,12 @@ assert.strictEqual(PZ.clusterOf(gp, 0).length, 2);
 let mp = PZ.planMove(gp, [2], 0, -2);
 assert.strictEqual(mp.blocked, false);
 assert.strictEqual(mp.newGrid[0], 20); assert.strictEqual(mp.newGrid[1], 10); assert.strictEqual(mp.newGrid[2], 11);
+// dropping a loose piece onto one end of a locked pair that has nowhere to go as a whole
+// splits the pair apart instead of refusing the move
 mp = PZ.planMove(gp, [2], 0, -1);
-assert.strictEqual(mp.blocked, true); assert.strictEqual(mp.changed, false);
-assert.deepStrictEqual(mp.newGrid, gp);
+assert.strictEqual(mp.blocked, false); assert.strictEqual(mp.changed, true);
+assert.strictEqual(mp.newGrid[0], 10); assert.strictEqual(mp.newGrid[1], 20); assert.strictEqual(mp.newGrid[2], 11);
+assert.strictEqual(PZ.bondCount(mp.newGrid, 0), 0);
 
 // dropping on the fully locked picture is refused
 const full = PZ.planMove(identity, [0], 0, 1);
@@ -61,20 +64,16 @@ assert.strictEqual(PZ.clusterOf(sw, 0).length, ROWS * 4);
 const sp = PZ.planMove(sw, leftBlock, 0, 4);
 assert.strictEqual(sp.blocked, false); assert(PZ.isSolved(sp.newGrid));
 
-// random play keeps a permutation and never breaks a bond
-function bondKeys(gr) {
-  const s = new Set();
-  for (let i = 0; i < N; i++) { const b = PZ.sideBonds(gr, i); if (b.r) s.add(gr[i] + '-' + gr[i + 1]); if (b.b) s.add(gr[i] + '-' + gr[i + COLS]); }
-  return s;
-}
+// random play always keeps a valid permutation, and a blocked move never changes the grid.
+// (Bonds are no longer guaranteed to survive: dropping a piece onto a locked set that has
+// nowhere to relocate to as a whole now splits that set apart instead of refusing the move.)
 for (let t = 0; t < 300; t++) {
   let gr = PZ.shuffle(rand);
   for (let s = 0; s < 400; s++) {
     const cl = PZ.clusterOf(gr, Math.floor(rand() * N));
     const pl = PZ.planMove(gr, cl, Math.floor(rand() * 7) - 3, Math.floor(rand() * 7) - 3);
     assert.strictEqual(sorted(pl.newGrid), sorted(identity));
-    const before = bondKeys(gr), after = bondKeys(pl.newGrid);
-    before.forEach(k => assert(after.has(k), 'bond broken'));
+    if (pl.blocked) assert.deepStrictEqual(pl.newGrid, gr);
     gr = pl.newGrid;
   }
 }

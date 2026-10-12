@@ -4,7 +4,7 @@ An 8x8 portrait-piece photo puzzle. Each solved puzzle drives 100 miles along a 
 
 - Finish Seattle to Key West to unlock ten more trips on the same US map: Route 66, Pacific Coast, Coast to Coast, the Appalachians, the Great Lakes Circuit, the Gulf Coast, Red Rock Country, the Mississippi River Trail, a New England Loop and Texas Hill Country. Pick from the trip menu; each trip keeps its own progress. "Reset all progress" clears everything. 100 stops across all 11 trips.
 - Drop a piece on another to swap them.
-- Pieces that fit together lock and move as one. Locked sets never split.
+- Pieces that fit together lock and move as one. Dropping another piece onto a locked set moves it there anyway: the set relocates whole if there's room, or splits apart (each of its pieces to its own nearest open cell) if there isn't.
 - Timer, move counter and progress save in the browser (localStorage).
 - Every trip has a photo theme (see the table below) — each puzzle on that trip pulls a random photo matching the theme from [Wikimedia Commons](https://commons.wikimedia.org), with the title, photographer and license shown under the board and linked back to the file page (required by those licenses).
 - To avoid dull puzzles, each new game loads three candidate photos and keeps the one with the most visual detail (it penalizes flat skies and blank water). The caption shows the score as "detail N/10". If the photo host does not allow reading pixels, the photo is used unscored.
