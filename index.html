@@ -68,6 +68,7 @@ button, label.btn { font: inherit; }
 .wrap { max-width: 760px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
 h1 { margin: 0; font: 700 32px/1 var(--f-disp); letter-spacing: 0.02em; text-transform: uppercase; text-wrap: balance; }
 .sub { margin: 4px 0 0; color: var(--muted); font-size: 15px; }
+.theme-line { margin: 2px 0 0; color: var(--muted); font-size: 14px; font-weight: 600; }
 
 /* Guide sign */
 .sign { background: var(--sign); color: var(--sign-ink); border-radius: 10px; padding: 4px; }
@@ -164,6 +165,7 @@ body.busy #board { pointer-events: none; }
 .tripcard.cur { border-color: var(--sign); box-shadow: inset 0 0 0 1px var(--sign); }
 .tname { font: 700 26px/1 var(--f-disp); text-transform: uppercase; letter-spacing: 0.02em; }
 .troute, .tmeta { color: var(--muted); font-size: 15px; }
+.ttheme { color: var(--ink); font-size: 14px; font-weight: 600; }
 .tbar { display: block; height: 6px; background: var(--line); border-radius: 3px; overflow: hidden; }
 .tbar i { display: block; height: 100%; background: var(--road); }
 .tstat { font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; }
@@ -186,6 +188,7 @@ body.busy #board { pointer-events: none; }
     <header>
       <h1>Puzzle Road Trip</h1>
       <p class="sub" id="sub"></p>
+      <p class="theme-line" id="themeLine"></p>
     </header>
     <div class="sign" aria-live="polite"><div class="sign-in" id="sign"></div></div>
     <div class="mapcard"><svg id="mapSvg" viewBox="0 0 690 395" role="img" aria-label="Trip route map"></svg></div>
@@ -231,6 +234,8 @@ body.busy #board { pointer-events: none; }
 <div class="toast" id="toast" hidden role="status"></div>
 
 <script src="logic.js"></script>
+<script src="themes.js"></script>
+<script src="commons.js"></script>
 <script>
 (function () {
   'use strict';
@@ -382,6 +387,7 @@ body.busy #board { pointer-events: none; }
       s.mi = i === 0 ? 0 : tr.stops[i - 1].mi + Math.round(hav(tr.stops[i - 1], s) * 1.2);
     });
     tr.total = tr.stops[tr.stops.length - 1].mi;
+    tr.theme = (window.TRIP_THEMES || {})[tr.id] || null;
   });
 
   var OUTLINE = [[-124.7,48.4],[-123.0,49.0],[-95.15,49.0],[-94.6,48.7],[-93.0,48.6],[-91.5,48.1],[-89.6,48.0],[-90.8,47.3],[-92.1,46.8],[-90.4,46.6],[-88.0,47.4],[-87.0,46.5],[-84.9,46.8],[-84.4,46.5],[-83.9,45.9],[-83.4,45.2],[-83.9,43.9],[-82.5,43.0],[-83.1,42.3],[-83.4,41.7],[-82.7,41.5],[-81.7,41.5],[-80.5,42.0],[-79.0,42.7],[-79.0,43.3],[-76.5,43.5],[-76.3,44.2],[-75.0,45.0],[-71.5,45.0],[-70.8,45.4],[-70.0,46.7],[-69.2,47.45],[-68.3,47.35],[-67.8,47.07],[-67.8,45.7],[-67.0,44.8],[-68.5,44.2],[-70.2,43.6],[-70.7,42.9],[-70.8,42.6],[-70.0,41.8],[-71.4,41.4],[-73.7,40.9],[-74.0,40.6],[-74.1,39.7],[-74.9,38.95],[-75.1,38.4],[-75.9,37.1],[-76.0,36.9],[-75.5,35.3],[-76.5,34.7],[-77.9,33.9],[-79.0,33.3],[-80.0,32.6],[-81.1,31.9],[-81.4,30.7],[-81.3,29.8],[-80.6,28.4],[-80.0,26.8],[-80.1,25.8],[-80.4,25.2],[-81.1,25.1],[-81.8,26.1],[-82.7,27.7],[-82.8,28.9],[-83.7,29.9],[-84.3,29.9],[-85.4,29.7],[-86.5,30.4],[-88.0,30.3],[-89.4,30.2],[-89.4,29.2],[-90.2,29.1],[-91.5,29.5],[-93.8,29.7],[-94.8,29.3],[-96.5,28.3],[-97.2,27.6],[-97.4,26.0],[-98.5,26.1],[-99.5,27.5],[-100.3,28.3],[-101.4,29.8],[-102.4,29.8],[-103.1,29.0],[-104.5,29.7],[-104.9,30.6],[-106.5,31.8],[-108.2,31.8],[-108.2,31.3],[-111.1,31.3],[-114.8,32.5],[-117.1,32.5],[-117.3,33.0],[-118.4,33.8],[-119.2,34.1],[-120.6,34.5],[-121.9,36.6],[-122.5,37.8],[-123.7,39.0],[-124.4,40.4],[-124.1,41.9],[-124.5,42.8],[-124.0,44.6],[-123.9,46.2],[-124.1,46.9]];
@@ -532,6 +538,7 @@ body.busy #board { pointer-events: none; }
     if (g && Array.isArray(g.grid) && g.grid.length === N && isFinite(g.seed)) {
       var seen = {}, ok = true;
       g.grid.forEach(function (v) { if (typeof v !== 'number' || v < 0 || v >= N || seen[v]) ok = false; seen[v] = 1; });
+      if (ok && g.kind === 'commons' && typeof g.title !== 'string') ok = false;
       if (ok) return g;
     }
     return null;
@@ -539,6 +546,7 @@ body.busy #board { pointer-events: none; }
   function renderMapText() {
     var c = cur(), miles = c.miles, done = miles >= TOTAL, nx = nextStop(), first = J.trips[TRIPS[0].id].done;
     $('sub').textContent = T.from + ' to ' + T.to + '. Every puzzle you finish drives 100 miles.';
+    $('themeLine').textContent = T.theme ? T.theme.emoji + ' Theme: ' + T.theme.name : '';
     $('sign').innerHTML = done
       ? '<div class="srow"><div><span class="slabel">Trip complete</span><span class="scity">' + T.to + '</span></div><div class="smi">' + fmt(TOTAL) + '<small>MI</small></div></div>'
       : '<div class="srow"><div><span class="slabel">Next stop</span><span class="scity">' + nx.n + ', ' + nx.s + '</span></div><div class="smi">' + fmt(nx.mi - miles) + '<small>MI</small></div></div>' +
@@ -584,6 +592,7 @@ body.busy #board { pointer-events: none; }
       h += '<li><button class="tripcard' + (isCur ? ' cur' : '') + (st.done ? ' done' : '') + '" data-id="' + tr.id + '" type="button">' +
         '<span class="tname">' + tr.name + '</span>' +
         '<span class="troute">' + tr.from + ' to ' + tr.to + '</span>' +
+        (tr.theme ? '<span class="ttheme">' + tr.theme.emoji + ' Theme: ' + tr.theme.name + '</span>' : '') +
         '<span class="tmeta">' + fmt(tr.total) + ' miles &middot; ' + Math.ceil(tr.total / 100) + ' puzzles</span>' +
         '<span class="tbar"><i style="width:' + pct + '%"></i></span>' +
         '<span class="tstat">' + status + (isCur ? ' &middot; current trip' : '') + '</span></button></li>';
@@ -745,12 +754,28 @@ body.busy #board { pointer-events: none; }
   }
   function saveGame() {
     if (!G || G.solved || G.kind === 'photo') return;
-    lsSet(STORE_G, { kind: G.kind, seed: G.seed, grid: G.grid, moves: G.moves, elapsed: Math.round(G.elapsed) });
+    var rec = { kind: G.kind, seed: G.seed, grid: G.grid, moves: G.moves, elapsed: Math.round(G.elapsed) };
+    if (G.kind === 'commons') rec.title = G.title;
+    lsSet(STORE_G, rec);
   }
   function cleanSlate() { lsDel(STORE_G); pendingResume = null; }
 
+  // Commons author/title/license text is wiki-contributed and goes into innerHTML (for the
+  // attribution link), so it is escaped here even though commons.js already strips tags.
+  function escapeHtml(s) {
+    return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
   function updateCaption() {
     if (!G) return;
+    if (G.kind === 'commons') {
+      var themeBit = G.themeEmoji ? G.themeEmoji + ' ' + G.themeName : (G.themeName || 'Themed photo');
+      $('caption').innerHTML = escapeHtml(themeBit) + ' &middot; ' +
+        '<a href="' + escapeHtml(G.pageUrl) + '" target="_blank" rel="noopener">' + escapeHtml(G.title) + '</a>' +
+        ' by ' + escapeHtml(G.author) + ' (' + escapeHtml(G.license) + ')' +
+        (G.detail != null ? ' &middot; detail ' + G.detail + '/10' : '') + ' &middot; 100 miles to earn';
+      return;
+    }
     var base = G.kind === 'photo' ? 'Your photo (not saved if you close the page)'
       : G.kind === 'picsum' ? 'Photo' + (G.credit ? ' by ' + G.credit : '') + ' via Lorem Picsum' + (G.detail != null ? ' · detail ' + G.detail + '/10' : '')
       : G.name + ' (generated scene)';
@@ -860,6 +885,81 @@ body.busy #board { pointer-events: none; }
         .catch(function () {});
     } catch (e) {}
   }
+
+  /* ---------- Wikimedia Commons (themed photos) ---------- */
+  // Category file listings rarely change within a session; cache them so later puzzles on
+  // the same trip don't re-query Commons for categories already seen.
+  function cachedListFiles(category) {
+    var key = 'commonsCat:' + category;
+    try {
+      var cached = sessionStorage.getItem(key);
+      if (cached) return Promise.resolve(JSON.parse(cached));
+    } catch (e) {}
+    return Commons.listCategoryFiles(category, { browser: true, maxFiles: 300 }, fetch).then(function (titles) {
+      try { sessionStorage.setItem(key, JSON.stringify(titles)); } catch (e) {}
+      return titles;
+    });
+  }
+  function commonsImageInfo(titles) {
+    return Commons.batchImageInfo(titles, { browser: true, thumbWidth: 1280 }, fetch);
+  }
+  // Same load-and-score shape as loadPicsum: try with CORS (for scoring), fall back to a
+  // plain (unscored) load if the host or network refuses it.
+  function loadCommonsImage(info, done) {
+    function attempt(cors, next) {
+      var im = new Image(), finished = false, to = 0;
+      function end(r, timedOut) { if (finished) return; finished = true; clearTimeout(to); next(r, timedOut); }
+      if (cors) im.crossOrigin = 'anonymous';
+      im.onload = function () {
+        try {
+          var cv = document.createElement('canvas'); cv.width = IW; cv.height = IH;
+          var g = cv.getContext('2d');
+          if ('filter' in g) g.filter = 'contrast(1.06) saturate(1.12)';
+          var s = Math.max(IW / im.naturalWidth, IH / im.naturalHeight), w = im.naturalWidth * s, h = im.naturalHeight * s;
+          g.drawImage(im, (IW - w) / 2, (IH - h) / 2, w, h);
+          end({ canvas: cv, score: cors ? scorePixels(im) : null });
+        } catch (e) { end(null); }
+      };
+      im.onerror = function () { end(null); };
+      to = setTimeout(function () { end(null, true); }, 6000);
+      im.src = info.thumbUrl;
+    }
+    attempt(true, function (r, timedOut) {
+      if (r || timedOut) { done(r); return; }
+      attempt(false, done);
+    });
+  }
+  // Seeded pick of up to 3 candidate files, one per random category in the theme, scored the
+  // same "best of 3" way as pickPhoto. done(null) means Commons could not produce a usable photo.
+  function pickThemedPhotos(seed, theme, done) {
+    var rand = rng(seed ^ 0x51a2f3c7);
+    // Wrapped in Promise.resolve().then(...) so that if fetch is entirely unavailable (e.g.
+    // the Claude-artifact sandbox, which blocks outside fetches outright) the resulting
+    // synchronous throw still lands in the .catch() below instead of escaping uncaught.
+    Promise.resolve().then(function () {
+      return Commons.chooseCandidates(theme.categories, rand, { slots: 3, backups: 4 }, { listFiles: cachedListFiles, getImageInfo: commonsImageInfo });
+    })
+      .then(function (candidates) {
+        if (!candidates.length) { done(null); return; }
+        var results = [], pending = candidates.length;
+        candidates.forEach(function (info) {
+          loadCommonsImage(info, function (r) {
+            results.push(r ? { info: info, canvas: r.canvas, score: r.score } : null);
+            if (--pending === 0) {
+              var best = null;
+              results.forEach(function (r2) {
+                if (!r2) return;
+                r2.rank = r2.score ? r2.score.rank : -1;
+                if (!best || r2.rank > best.rank) best = r2;
+              });
+              done(best);
+            }
+          });
+        });
+      })
+      .catch(function () { done(null); });
+  }
+
   function begin(seed, kind, img, name, detail) {
     cleanSlate();
     var grid = P.shuffle(rng(seed ^ 0x9e3779b9));
@@ -867,17 +967,44 @@ body.busy #board { pointer-events: none; }
     saveGame();
     if (kind === 'picsum') fetchCredit(seed);
   }
+  function beginCommons(seed, picked, theme) {
+    cleanSlate();
+    var grid = P.shuffle(rng(seed ^ 0x9e3779b9));
+    openGame({
+      seed: seed, kind: 'commons', img: picked.canvas, grid: grid, moves: 0, elapsed: 0, solved: false,
+      detail: picked.score ? picked.score.score : null,
+      title: picked.info.displayTitle, pageUrl: picked.info.pageUrl,
+      author: picked.info.author, license: picked.info.license, licenseUrl: picked.info.licenseUrl,
+      themeName: theme.name, themeEmoji: theme.emoji
+    });
+    saveGame();
+  }
   function newGame(photoCanvas) {
     if (busy) return;
     var seed = Math.floor(Math.random() * 2147483647);
     if (photoCanvas) { begin(seed, 'photo', photoCanvas, 'Your photo'); return; }
-    setBusy(true, 'Picking a photo...');
-    pickPhoto(seed, function (r) {
+    var theme = T.theme;
+    function withPicsum(toastMsg) {
+      setBusy(true, 'Picking a photo...');
+      pickPhoto(seed, function (r) {
+        setBusy(false);
+        if (r) { begin(r.seed, 'picsum', r.canvas, 'Photo', r.score ? r.score.score : null); if (toastMsg) showToast(toastMsg, 4000); return; }
+        var sc = makeScene(seed);
+        begin(seed, 'scene', sc.canvas, sc.name);
+        showToast('Could not load a photo, so this puzzle uses a generated scene.', 4500);
+      });
+    }
+    if (!theme) { withPicsum(); return; }
+    setBusy(true, 'Picking a ' + theme.name.toLowerCase() + ' photo...');
+    var settled = false, timer = setTimeout(function () {
+      if (settled) return; settled = true;
+      withPicsum('Themed photos took too long to load, so this puzzle uses a random photo instead.');
+    }, 8000);
+    pickThemedPhotos(seed, theme, function (best) {
+      if (settled) return; settled = true; clearTimeout(timer);
       setBusy(false);
-      if (r) { begin(r.seed, 'picsum', r.canvas, 'Photo', r.score ? r.score.score : null); return; }
-      var sc = makeScene(seed);
-      begin(seed, 'scene', sc.canvas, sc.name);
-      showToast('Could not load a photo, so this puzzle uses a generated scene.', 4500);
+      if (best) { beginCommons(seed, best, theme); return; }
+      withPicsum('Could not load ' + theme.name.toLowerCase() + ' photos, so this puzzle uses a random photo instead.');
     });
   }
   function resumeGame() {
@@ -889,14 +1016,33 @@ body.busy #board { pointer-events: none; }
       openGame({ seed: s.seed, kind: kind, name: name, img: img, grid: s.grid.slice(), moves: s.moves || 0, elapsed: s.elapsed || 0, solved: false, detail: detail == null ? null : detail });
       if (kind === 'picsum') fetchCredit(s.seed);
     }
-    if (s.kind === 'picsum') {
+    function fallbackScene() {
+      var sc = makeScene(s.seed);
+      go(sc.canvas, 'scene', sc.name);
+      showToast('Could not reload your photo, so the board continues with a generated scene.', 4500);
+    }
+    if (s.kind === 'commons') {
+      setBusy(true, 'Loading your photo...');
+      var theme = T.theme;
+      Promise.resolve().then(function () { return commonsImageInfo([s.title]); }).then(function (infoByTitle) {
+        setBusy(false);
+        var info = infoByTitle[s.title];
+        if (!info) { fallbackScene(); return; }
+        loadCommonsImage(info, function (r) {
+          if (!r) { fallbackScene(); return; }
+          openGame({
+            seed: s.seed, kind: 'commons', img: r.canvas, grid: s.grid.slice(), moves: s.moves || 0, elapsed: s.elapsed || 0, solved: false,
+            detail: r.score ? r.score.score : null, title: info.displayTitle, pageUrl: info.pageUrl, author: info.author,
+            license: info.license, licenseUrl: info.licenseUrl, themeName: theme ? theme.name : '', themeEmoji: theme ? theme.emoji : ''
+          });
+        });
+      }).catch(function () { setBusy(false); fallbackScene(); });
+    } else if (s.kind === 'picsum') {
       setBusy(true, 'Loading your photo...');
       loadPicsum(s.seed, function (r) {
         setBusy(false);
         if (r) { go(r.canvas, 'picsum', 'Photo', r.score ? r.score.score : null); return; }
-        var sc = makeScene(s.seed);
-        go(sc.canvas, 'scene', sc.name);
-        showToast('Could not reload your photo, so the board continues with a generated scene.', 4500);
+        fallbackScene();
       });
     } else {
       var sc2 = makeScene(s.seed);

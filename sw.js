@@ -1,6 +1,6 @@
 'use strict';
-var CACHE = 'puzzle-road-trip-v1';
-var ASSETS = ['./', './index.html', './logic.js', './manifest.json', './icons/icon-192.png', './icons/icon-512.png'];
+var CACHE = 'puzzle-road-trip-v2';
+var ASSETS = ['./', './index.html', './logic.js', './themes.js', './commons.js', './manifest.json', './icons/icon-192.png', './icons/icon-512.png'];
 
 self.addEventListener('install', function (e) {
   e.waitUntil(caches.open(CACHE).then(function (c) { return c.addAll(ASSETS); }).then(function () { return self.skipWaiting(); }));
