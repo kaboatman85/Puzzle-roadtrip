@@ -24,8 +24,10 @@ var INDEX_HTML = read('index.html');
 var BODY = extractBody(INDEX_HTML);
 var INLINE_SCRIPTS = extractInlineScripts(INDEX_HTML);
 var LOGIC_JS = read('logic.js');
-var KEY_LINE = "var UNSPLASH_ACCESS_KEY = '';";
-assert.ok(INDEX_HTML.indexOf(KEY_LINE) !== -1, 'index.html should ship with an empty UNSPLASH_ACCESS_KEY');
+// Whatever key index.html ships with, every test swaps in its own (or none) -- tests never
+// use the real key or touch the network.
+var KEY_LINE = /var UNSPLASH_ACCESS_KEY = '[^']*';/;
+assert.ok(KEY_LINE.test(INDEX_HTML), 'index.html should define UNSPLASH_ACCESS_KEY');
 
 function fakeCtx2d() {
   var noop = function () {};
@@ -87,7 +89,7 @@ function buildDom(opts) {
   }
   run(LOGIC_JS);
   if (opts.beforeMain) opts.beforeMain(window);
-  INLINE_SCRIPTS.forEach(function (src) { run(src.replace(KEY_LINE, "var UNSPLASH_ACCESS_KEY = '" + key + "';")); });
+  INLINE_SCRIPTS.forEach(function (src) { run(src.replace(KEY_LINE, function () { return "var UNSPLASH_ACCESS_KEY = '" + key + "';"; })); });
   return dom;
 }
 
