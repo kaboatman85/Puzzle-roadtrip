@@ -14,6 +14,15 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Road Trip">
 <style>html,body{margin:0}:root{color-scheme:light}[hidden]{display:none!important}</style>
+<script>
+/* ================== PEXELS API KEY ==================
+   Paste your key from https://www.pexels.com/api/ between the quotes.
+   WARNING: this key is visible to anyone. The site is served from GitHub Pages, so this file
+   is public both in the repo and in the page source. A Pexels key only allows photo searches,
+   but someone could copy it and use up your rate limit. Leave it empty ('') to play with
+   generated scenes instead of photos. */
+var PEXELS_API_KEY = '';
+</script>
 </head>
 <body>
 <title>Puzzle Road Trip</title>
@@ -149,6 +158,7 @@ h1 { margin: 0; font: 700 32px/1 var(--f-disp); letter-spacing: 0.02em; text-tra
 .wbody p { margin: 0; }
 .wstat { color: var(--muted); font-variant-numeric: tabular-nums; }
 .wphoto { width: 100%; border-radius: 8px; display: block; }
+.wcredit { color: var(--muted); font-size: 13px; }
 .wact { display: flex; flex-wrap: wrap; gap: 10px; }
 
 .toast { position: fixed; left: 50%; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); z-index: 60; background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 8px; font-size: 14px; max-width: calc(100% - 32px); text-align: center; }
@@ -223,6 +233,7 @@ body.busy #board { pointer-events: none; }
         <p id="winLine"></p>
         <p class="wstat" id="winStat"></p>
         <img class="wphoto" id="winPhoto" hidden alt="The photo you just solved">
+        <p class="wcredit" id="winCredit" hidden></p>
         <div class="wact"><button class="btn primary" id="winTrips" type="button" hidden>Choose next trip</button><button class="btn primary" id="winMap" type="button">Back to map</button><button class="btn" id="winNext" type="button">Next puzzle</button><button class="btn ghost" id="winView" type="button">View puzzle</button></div>
       </div>
     </div>
@@ -232,8 +243,6 @@ body.busy #board { pointer-events: none; }
 <div class="toast" id="toast" hidden role="status"></div>
 
 <script src="logic.js"></script>
-<script src="themes.js"></script>
-<script src="commons.js"></script>
 <script>
 (function () {
   'use strict';
@@ -241,14 +250,26 @@ body.busy #board { pointer-events: none; }
   var STORE_J = 'puzzleRoad.journey.v1', STORE_G = 'puzzleRoad.game.v1';
   function $(id) { return document.getElementById(id); }
   function lsGet(k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } }
-  function lsSet(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+  // If storage is full, drop the Pexels search cache (it's only a cache) and try once more, so
+  // cached searches can never crowd out the saved game or journey.
+  function lsSet(k, v) {
+    var str = JSON.stringify(v);
+    try { localStorage.setItem(k, str); } catch (e) {
+      clearPexelsCache(true);
+      try { localStorage.setItem(k, str); } catch (e2) {}
+    }
+  }
   function lsDel(k) { try { localStorage.removeItem(k); } catch (e) {} }
   function fmt(n) { return Math.round(n).toLocaleString('en-US'); }
   var reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   /* ---------- Trips ---------- */
+  // theme.queries: Pexels searches for that trip's photos. Each puzzle picks one at random,
+  // so more (and more varied) queries mean more variety. Edit freely.
   var TRIPS = [
-    { id: 'sea-key', name: 'Seattle to Key West', from: 'Seattle, WA', to: 'Key West, FL', stops: [
+    { id: 'sea-key', name: 'Seattle to Key West', from: 'Seattle, WA', to: 'Key West, FL',
+      theme: { name: 'Famous buildings and monuments', emoji: '🏛️', queries: ['famous buildings', 'monument', 'landmark', 'architecture'] },
+      stops: [
       { n: 'Seattle', s: 'WA', lat: 47.61, lon: -122.33 },
       { n: 'Spokane', s: 'WA', lat: 47.66, lon: -117.43 },
       { n: 'Missoula', s: 'MT', lat: 46.87, lon: -114.00 },
@@ -263,7 +284,9 @@ body.busy #board { pointer-events: none; }
       { n: 'Miami', s: 'FL', lat: 25.76, lon: -80.19 },
       { n: 'Key West', s: 'FL', lat: 24.56, lon: -81.78 }
     ] },
-    { id: 'route66', name: 'Route 66', from: 'Chicago, IL', to: 'Santa Monica, CA', vb: [45, 52, 441, 252], stops: [
+    { id: 'route66', name: 'Route 66', from: 'Chicago, IL', to: 'Santa Monica, CA', vb: [45, 52, 441, 252],
+      theme: { name: 'Roadside Americana', emoji: '🛣️', queries: ['route 66', 'vintage diner', 'neon sign', 'classic car', 'desert highway'] },
+      stops: [
       { n: 'Chicago', s: 'IL', lat: 41.88, lon: -87.63 },
       { n: 'St. Louis', s: 'MO', lat: 38.63, lon: -90.20 },
       { n: 'Springfield', s: 'MO', lat: 37.21, lon: -93.29 },
@@ -275,7 +298,9 @@ body.busy #board { pointer-events: none; }
       { n: 'Barstow', s: 'CA', lat: 34.90, lon: -117.02 },
       { n: 'Santa Monica', s: 'CA', lat: 34.02, lon: -118.49 }
     ] },
-    { id: 'pacific', name: 'Pacific Coast', from: 'Seattle, WA', to: 'San Diego, CA', vb: [0, 14, 437, 250], stops: [
+    { id: 'pacific', name: 'Pacific Coast', from: 'Seattle, WA', to: 'San Diego, CA', vb: [0, 14, 437, 250],
+      theme: { name: 'Lighthouses and coastal scenery', emoji: '🌊', queries: ['lighthouse', 'ocean cliffs', 'coastline', 'beach sunset'] },
+      stops: [
       { n: 'Seattle', s: 'WA', lat: 47.61, lon: -122.33 },
       { n: 'Astoria', s: 'OR', lat: 46.19, lon: -123.83 },
       { n: 'Newport', s: 'OR', lat: 44.64, lon: -124.05 },
@@ -285,7 +310,9 @@ body.busy #board { pointer-events: none; }
       { n: 'Los Angeles', s: 'CA', lat: 34.05, lon: -118.24 },
       { n: 'San Diego', s: 'CA', lat: 32.72, lon: -117.16 }
     ] },
-    { id: 'coast2coast', name: 'Coast to Coast', from: 'New York, NY', to: 'San Francisco, CA', stops: [
+    { id: 'coast2coast', name: 'Coast to Coast', from: 'New York, NY', to: 'San Francisco, CA',
+      theme: { name: 'Bridges and city skylines', emoji: '🌉', queries: ['city skyline', 'bridge', 'downtown at night'] },
+      stops: [
       { n: 'New York', s: 'NY', lat: 40.71, lon: -74.01 },
       { n: 'Pittsburgh', s: 'PA', lat: 40.44, lon: -79.99 },
       { n: 'Chicago', s: 'IL', lat: 41.88, lon: -87.63 },
@@ -295,7 +322,9 @@ body.busy #board { pointer-events: none; }
       { n: 'Reno', s: 'NV', lat: 39.53, lon: -119.81 },
       { n: 'San Francisco', s: 'CA', lat: 37.77, lon: -122.42 }
     ] },
-    { id: 'appalachians', name: 'Appalachians', from: 'Mount Katahdin, ME', to: 'Springer Mountain, GA', vb: [330, 38, 350, 200], stops: [
+    { id: 'appalachians', name: 'Appalachians', from: 'Mount Katahdin, ME', to: 'Springer Mountain, GA', vb: [330, 38, 350, 200],
+      theme: { name: 'National parks and mountain scenery', emoji: '🏔️', queries: ['national park', 'mountain landscape', 'forest', 'waterfall'] },
+      stops: [
       { n: 'Mount Katahdin', short: 'Katahdin', s: 'ME', lat: 45.90, lon: -68.92 },
       { n: 'North Conway', s: 'NH', lat: 44.05, lon: -71.13 },
       { n: 'Rutland', s: 'VT', lat: 43.61, lon: -72.97 },
@@ -307,7 +336,9 @@ body.busy #board { pointer-events: none; }
       { n: 'Asheville', s: 'NC', lat: 35.60, lon: -82.55 },
       { n: 'Springer Mountain', short: 'Springer Mtn', s: 'GA', lat: 34.63, lon: -84.19 }
     ] },
-    { id: 'greatlakes', name: 'Great Lakes Circuit', from: 'Chicago, IL', to: 'Niagara Falls, NY', vb: [399, 37, 162, 121], stops: [
+    { id: 'greatlakes', name: 'Great Lakes Circuit', from: 'Chicago, IL', to: 'Niagara Falls, NY', vb: [399, 37, 162, 121],
+      theme: { name: 'Great Lakes shoreline scenery', emoji: '🚢', queries: ['great lakes', 'lake michigan', 'lighthouse pier', 'cargo ship', 'niagara falls'] },
+      stops: [
       { n: 'Chicago', s: 'IL', lat: 41.88, lon: -87.63 },
       { n: 'Milwaukee', s: 'WI', lat: 43.04, lon: -87.91 },
       { n: 'Green Bay', s: 'WI', lat: 44.51, lon: -88.02 },
@@ -319,7 +350,9 @@ body.busy #board { pointer-events: none; }
       { n: 'Buffalo', s: 'NY', lat: 42.89, lon: -78.88 },
       { n: 'Niagara Falls', s: 'NY', lat: 43.10, lon: -79.04 }
     ] },
-    { id: 'gulfcoast', name: 'Gulf Coast', from: 'New Orleans, LA', to: 'Tampa, FL', vb: [376, 250, 157, 98], stops: [
+    { id: 'gulfcoast', name: 'Gulf Coast', from: 'New Orleans, LA', to: 'Tampa, FL', vb: [376, 250, 157, 98],
+      theme: { name: 'Gulf Coast beaches and bayous', emoji: '🏖️', queries: ['gulf coast beach', 'bayou', 'florida beach', 'palm trees beach', 'fishing pier'] },
+      stops: [
       { n: 'New Orleans', s: 'LA', lat: 29.95, lon: -90.07 },
       { n: 'Biloxi', s: 'MS', lat: 30.40, lon: -88.89 },
       { n: 'Mobile', s: 'AL', lat: 30.69, lon: -88.04 },
@@ -330,7 +363,9 @@ body.busy #board { pointer-events: none; }
       { n: 'Orlando', s: 'FL', lat: 28.54, lon: -81.38 },
       { n: 'Tampa', s: 'FL', lat: 27.95, lon: -82.46 }
     ] },
-    { id: 'redrock', name: 'Red Rock Country', from: 'Las Vegas, NV', to: 'Santa Fe, NM', vb: [95, 139, 163, 100], stops: [
+    { id: 'redrock', name: 'Red Rock Country', from: 'Las Vegas, NV', to: 'Santa Fe, NM', vb: [95, 139, 163, 100],
+      theme: { name: 'Desert canyons and red rock formations', emoji: '🏜️', queries: ['red rock canyon', 'grand canyon', 'monument valley', 'arches national park', 'desert canyon'] },
+      stops: [
       { n: 'Las Vegas', s: 'NV', lat: 36.17, lon: -115.14 },
       { n: 'Zion National Park', short: 'Zion', s: 'UT', lat: 37.20, lon: -112.98 },
       { n: 'Bryce Canyon', s: 'UT', lat: 37.59, lon: -112.19 },
@@ -340,7 +375,9 @@ body.busy #board { pointer-events: none; }
       { n: 'Durango', s: 'CO', lat: 37.27, lon: -107.88 },
       { n: 'Santa Fe', s: 'NM', lat: 35.69, lon: -105.94 }
     ] },
-    { id: 'mississippi', name: 'Mississippi River Trail', from: 'Minneapolis, MN', to: 'New Orleans, LA', vb: [340, 21, 96, 328], stops: [
+    { id: 'mississippi', name: 'Mississippi River Trail', from: 'Minneapolis, MN', to: 'New Orleans, LA', vb: [340, 21, 96, 328],
+      theme: { name: 'River scenery and river towns', emoji: '🚤', queries: ['mississippi river', 'riverboat', 'river town', 'river bridge', 'river sunset'] },
+      stops: [
       { n: 'Minneapolis', s: 'MN', lat: 44.98, lon: -93.27 },
       { n: 'La Crosse', s: 'WI', lat: 43.80, lon: -91.25 },
       { n: 'Dubuque', s: 'IA', lat: 42.50, lon: -90.66 },
@@ -351,7 +388,9 @@ body.busy #board { pointer-events: none; }
       { n: 'Baton Rouge', s: 'LA', lat: 30.45, lon: -91.15 },
       { n: 'New Orleans', s: 'LA', lat: 29.95, lon: -90.07 }
     ] },
-    { id: 'newengland', name: 'New England Loop', from: 'Boston, MA', to: 'Burlington, VT', vb: [565, 56, 116, 90], stops: [
+    { id: 'newengland', name: 'New England Loop', from: 'Boston, MA', to: 'Burlington, VT', vb: [565, 56, 116, 90],
+      theme: { name: 'Fall foliage and coastal New England', emoji: '🍁', queries: ['fall foliage', 'autumn leaves', 'covered bridge', 'new england', 'maine lighthouse'] },
+      stops: [
       { n: 'Boston', s: 'MA', lat: 42.36, lon: -71.06 },
       { n: 'Salem', s: 'MA', lat: 42.52, lon: -70.90 },
       { n: 'Portsmouth', s: 'NH', lat: 43.08, lon: -70.76 },
@@ -362,7 +401,9 @@ body.busy #board { pointer-events: none; }
       { n: 'Stowe', s: 'VT', lat: 44.47, lon: -72.68 },
       { n: 'Burlington', s: 'VT', lat: 44.48, lon: -73.21 }
     ] },
-    { id: 'lonestar', name: 'Texas Hill Country', from: 'Houston, TX', to: 'Dallas, TX', vb: [278, 220, 99, 107], stops: [
+    { id: 'lonestar', name: 'Texas Hill Country', from: 'Houston, TX', to: 'Dallas, TX', vb: [278, 220, 99, 107],
+      theme: { name: 'Texas wildflowers and hill country', emoji: '🌻', queries: ['bluebonnets', 'wildflowers', 'texas ranch', 'longhorn', 'hill country'] },
+      stops: [
       { n: 'Houston', s: 'TX', lat: 29.76, lon: -95.37 },
       { n: 'San Antonio', s: 'TX', lat: 29.42, lon: -98.49 },
       { n: 'Fredericksburg', s: 'TX', lat: 30.28, lon: -98.87 },
@@ -385,7 +426,6 @@ body.busy #board { pointer-events: none; }
       s.mi = i === 0 ? 0 : tr.stops[i - 1].mi + Math.round(hav(tr.stops[i - 1], s) * 1.2);
     });
     tr.total = tr.stops[tr.stops.length - 1].mi;
-    tr.theme = (window.TRIP_THEMES || {})[tr.id] || null;
   });
 
   var OUTLINE = [[-124.7,48.4],[-123.0,49.0],[-95.15,49.0],[-94.6,48.7],[-93.0,48.6],[-91.5,48.1],[-89.6,48.0],[-90.8,47.3],[-92.1,46.8],[-90.4,46.6],[-88.0,47.4],[-87.0,46.5],[-84.9,46.8],[-84.4,46.5],[-83.9,45.9],[-83.4,45.2],[-83.9,43.9],[-82.5,43.0],[-83.1,42.3],[-83.4,41.7],[-82.7,41.5],[-81.7,41.5],[-80.5,42.0],[-79.0,42.7],[-79.0,43.3],[-76.5,43.5],[-76.3,44.2],[-75.0,45.0],[-71.5,45.0],[-70.8,45.4],[-70.0,46.7],[-69.2,47.45],[-68.3,47.35],[-67.8,47.07],[-67.8,45.7],[-67.0,44.8],[-68.5,44.2],[-70.2,43.6],[-70.7,42.9],[-70.8,42.6],[-70.0,41.8],[-71.4,41.4],[-73.7,40.9],[-74.0,40.6],[-74.1,39.7],[-74.9,38.95],[-75.1,38.4],[-75.9,37.1],[-76.0,36.9],[-75.5,35.3],[-76.5,34.7],[-77.9,33.9],[-79.0,33.3],[-80.0,32.6],[-81.1,31.9],[-81.4,30.7],[-81.3,29.8],[-80.6,28.4],[-80.0,26.8],[-80.1,25.8],[-80.4,25.2],[-81.1,25.1],[-81.8,26.1],[-82.7,27.7],[-82.8,28.9],[-83.7,29.9],[-84.3,29.9],[-85.4,29.7],[-86.5,30.4],[-88.0,30.3],[-89.4,30.2],[-89.4,29.2],[-90.2,29.1],[-91.5,29.5],[-93.8,29.7],[-94.8,29.3],[-96.5,28.3],[-97.2,27.6],[-97.4,26.0],[-98.5,26.1],[-99.5,27.5],[-100.3,28.3],[-101.4,29.8],[-102.4,29.8],[-103.1,29.0],[-104.5,29.7],[-104.9,30.6],[-106.5,31.8],[-108.2,31.8],[-108.2,31.3],[-111.1,31.3],[-114.8,32.5],[-117.1,32.5],[-117.3,33.0],[-118.4,33.8],[-119.2,34.1],[-120.6,34.5],[-121.9,36.6],[-122.5,37.8],[-123.7,39.0],[-124.4,40.4],[-124.1,41.9],[-124.5,42.8],[-124.0,44.6],[-123.9,46.2],[-124.1,46.9]];
@@ -535,7 +575,7 @@ body.busy #board { pointer-events: none; }
     if (g && Array.isArray(g.grid) && g.grid.length === N && isFinite(g.seed)) {
       var seen = {}, ok = true;
       g.grid.forEach(function (v) { if (typeof v !== 'number' || v < 0 || v >= N || seen[v]) ok = false; seen[v] = 1; });
-      if (ok && g.kind === 'commons' && typeof g.title !== 'string') ok = false;
+      if (ok && g.kind === 'pexels' && !(g.photo && typeof g.photo.src === 'string')) ok = false;
       if (ok) return g;
     }
     return null;
@@ -750,30 +790,33 @@ body.busy #board { pointer-events: none; }
   function saveGame() {
     if (!G || G.solved) return;
     var rec = { kind: G.kind, seed: G.seed, grid: G.grid, moves: G.moves, elapsed: Math.round(G.elapsed) };
-    if (G.kind === 'commons') rec.title = G.fileTitle;
+    // The whole photo record is saved, so Resume reloads the same picture without an API call.
+    if (G.kind === 'pexels') rec.photo = G.photo;
     lsSet(STORE_G, rec);
   }
   function cleanSlate() { lsDel(STORE_G); }
 
-  // Commons author/title/license text is wiki-contributed and goes into innerHTML (for the
-  // attribution link), so it is escaped here even though commons.js already strips tags.
+  // Photographer names and URLs come from the Pexels API and go into innerHTML (for the
+  // attribution links), so they are escaped, and only https links are allowed.
   function escapeHtml(s) {
     return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+  function safeUrl(u) { return /^https:\/\//.test(String(u)) ? String(u) : 'https://www.pexels.com/'; }
+  // "Photo by <photographer> on Pexels", as the Pexels API guidelines require.
+  function pexelsCredit(ph) {
+    return 'Photo by <a href="' + escapeHtml(safeUrl(ph.byUrl)) + '" target="_blank" rel="noopener">' + escapeHtml(ph.by) + '</a>' +
+      ' on <a href="' + escapeHtml(safeUrl(ph.url)) + '" target="_blank" rel="noopener">Pexels</a>';
   }
 
   function updateCaption() {
     if (!G) return;
-    if (G.kind === 'commons') {
+    if (G.kind === 'pexels') {
       var themeBit = G.themeEmoji ? G.themeEmoji + ' ' + G.themeName : (G.themeName || 'Themed photo');
-      $('caption').innerHTML = escapeHtml(themeBit) + ' &middot; ' +
-        '<a href="' + escapeHtml(G.pageUrl) + '" target="_blank" rel="noopener">' + escapeHtml(G.title) + '</a>' +
-        ' by ' + escapeHtml(G.author) + ' (' + escapeHtml(G.license) + ')' +
+      $('caption').innerHTML = escapeHtml(themeBit) + ' &middot; ' + pexelsCredit(G.photo) +
         (G.detail != null ? ' &middot; detail ' + G.detail + '/10' : '') + ' &middot; 100 miles to earn';
       return;
     }
-    var base = G.kind === 'picsum' ? 'Photo' + (G.credit ? ' by ' + G.credit : '') + ' via Lorem Picsum' + (G.detail != null ? ' · detail ' + G.detail + '/10' : '')
-      : G.name + ' (generated scene)';
-    $('caption').textContent = base + ' · 100 miles to earn';
+    $('caption').textContent = G.name + ' (generated scene) · 100 miles to earn';
   }
   function openGame(g) {
     G = g;
@@ -810,7 +853,7 @@ body.busy #board { pointer-events: none; }
       el.classList.toggle('bt', b.t); el.classList.toggle('br', b.r); el.classList.toggle('bb', b.b); el.classList.toggle('bl', b.l);
     }
   }
-  /* ---------- Photos (Lorem Picsum) ---------- */
+  /* ---------- Photos (Pexels) ---------- */
   var busy = false, toastTimer = 0;
   function showToast(msg, ms) {
     var el = $('toast'); clearTimeout(toastTimer);
@@ -831,75 +874,62 @@ body.busy #board { pointer-events: none; }
       return P.detailScore(px.data, 160, 200, COLS, ROWS);
     } catch (e) { return null; }
   }
-  function loadPicsum(seed, done) {
-    var url = 'https://picsum.photos/seed/pr' + seed + '/1280/1600.jpg';
-    function attempt(cors, next) {
-      var im = new Image(), finished = false, to = 0;
-      function end(r, timedOut) { if (finished) return; finished = true; clearTimeout(to); next(r, timedOut); }
-      if (cors) im.crossOrigin = 'anonymous';
-      im.onload = function () {
-        try {
-          var cv = document.createElement('canvas'); cv.width = IW; cv.height = IH;
-          var g = cv.getContext('2d');
-          if ('filter' in g) g.filter = 'contrast(1.06) saturate(1.12)';
-          g.drawImage(im, 0, 0, IW, IH);
-          end({ seed: seed, canvas: cv, score: cors ? scorePixels(im) : null });
-        } catch (e) { end(null); }
-      };
-      im.onerror = function () { end(null); };
-      to = setTimeout(function () { end(null, true); }, 12000);
-      im.src = url;
-    }
-    attempt(true, function (r, timedOut) {
-      if (r || timedOut) { done(r); return; }
-      attempt(false, done);
-    });
-  }
-  // Load three candidates at once and keep the one with the most puzzle-friendly detail.
-  function pickPhoto(seed, done) {
-    var results = [], pending = 3;
-    function finish() {
-      var best = null;
-      results.forEach(function (r) {
-        if (!r) return;
-        r.rank = r.score ? r.score.rank : -1;
-        if (!best || r.rank > best.rank) best = r;
-      });
-      done(best);
-    }
-    for (var k = 0; k < 3; k++) (function (s) {
-      loadPicsum(s, function (r) { results.push(r); if (--pending === 0) finish(); });
-    })(seed + k);
-  }
-  function fetchCredit(seed) {
-    try {
-      fetch('https://picsum.photos/seed/pr' + seed + '/info')
-        .then(function (r) { return r.json(); })
-        .then(function (j) { if (j && j.author && G && G.seed === seed && G.kind === 'picsum') { G.credit = String(j.author); updateCaption(); } })
-        .catch(function () {});
-    } catch (e) {}
-  }
 
-  /* ---------- Wikimedia Commons (themed photos) ---------- */
-  // Category file listings rarely change within a session; cache them so later puzzles on
-  // the same trip don't re-query Commons for categories already seen.
-  function cachedListFiles(category) {
-    var key = 'commonsCat:' + category;
+  // Search responses are cached in localStorage for 24 hours (trimmed to the fields used here)
+  // to stay well under the Pexels rate limits (200 requests/hour, 20,000/month).
+  var PEXELS_CACHE = 'puzzleRoad.pexels.search:', PEXELS_CACHE_MS = 24 * 3600 * 1000;
+  var STORE_RECENT = 'puzzleRoad.pexels.recent.v1', RECENT_MAX = 50;
+  function clearPexelsCache(all) {
     try {
-      var cached = sessionStorage.getItem(key);
-      if (cached) return Promise.resolve(JSON.parse(cached));
+      for (var i = localStorage.length - 1; i >= 0; i--) {
+        var k = localStorage.key(i);
+        if (!k || k.indexOf(PEXELS_CACHE) !== 0) continue;
+        var c = all ? null : lsGet(k);
+        if (!c || !(Date.now() - c.at < PEXELS_CACHE_MS)) localStorage.removeItem(k);
+      }
     } catch (e) {}
-    return Commons.listCategoryFiles(category, { browser: true, maxFiles: 300 }, fetch).then(function (titles) {
-      try { sessionStorage.setItem(key, JSON.stringify(titles)); } catch (e) {}
-      return titles;
-    });
   }
-  function commonsImageInfo(titles) {
-    return Commons.batchImageInfo(titles, { browser: true, thumbWidth: 1280 }, fetch);
+  function pexelsSearch(query, page) {
+    var key = PEXELS_CACHE + query + '|' + page, c = lsGet(key);
+    if (c && Date.now() - c.at < PEXELS_CACHE_MS && Array.isArray(c.photos)) return Promise.resolve(c.photos);
+    var url = 'https://api.pexels.com/v1/search?query=' + encodeURIComponent(query) +
+      '&orientation=portrait&size=large&per_page=40&page=' + page;
+    return fetch(url, { headers: { Authorization: PEXELS_API_KEY } })
+      .then(function (r) {
+        if (!r.ok) throw new Error('Pexels search failed: HTTP ' + r.status);
+        return r.json();
+      })
+      .then(function (j) {
+        var photos = (j && Array.isArray(j.photos) ? j.photos : [])
+          .filter(function (p) { return p && p.id && p.src && typeof p.src.original === 'string'; })
+          .map(function (p) {
+            return { id: p.id, src: p.src.original, by: String(p.photographer || 'Unknown photographer'), byUrl: p.photographer_url || '', url: p.url || '' };
+          });
+        clearPexelsCache(false);
+        lsSet(key, { at: Date.now(), photos: photos });
+        return photos;
+      });
   }
-  // Same load-and-score shape as loadPicsum: try with CORS (for scoring), fall back to a
-  // plain (unscored) load if the host or network refuses it.
-  function loadCommonsImage(info, done) {
+  // Last RECENT_MAX photo ids used on each trip, so the same photo doesn't come back soon.
+  function recentIds(tripId) {
+    var r = lsGet(STORE_RECENT);
+    return r && Array.isArray(r[tripId]) ? r[tripId] : [];
+  }
+  function rememberPhoto(tripId, id) {
+    var r = lsGet(STORE_RECENT);
+    if (!r || typeof r !== 'object') r = {};
+    var list = recentIds(tripId).filter(function (x) { return x !== id; });
+    list.push(id);
+    r[tripId] = list.slice(-RECENT_MAX);
+    lsSet(STORE_RECENT, r);
+  }
+  // Pexels resizes and crops on its side, so this arrives at exactly the board's 1280x1600.
+  function pexelsImageUrl(photo) {
+    return photo.src + '?auto=compress&cs=tinysrgb&w=' + IW + '&h=' + IH + '&fit=crop';
+  }
+  // Try with CORS (for scoring), fall back to a plain (unscored) load if the host or network
+  // refuses it. The draw still cover-fits, in case a photo comes back at another size.
+  function loadPexelsImage(photo, done) {
     function attempt(cors, next) {
       var im = new Image(), finished = false, to = 0;
       function end(r, timedOut) { if (finished) return; finished = true; clearTimeout(to); next(r, timedOut); }
@@ -908,7 +938,6 @@ body.busy #board { pointer-events: none; }
         try {
           var cv = document.createElement('canvas'); cv.width = IW; cv.height = IH;
           var g = cv.getContext('2d');
-          if ('filter' in g) g.filter = 'contrast(1.06) saturate(1.12)';
           var s = Math.max(IW / im.naturalWidth, IH / im.naturalHeight), w = im.naturalWidth * s, h = im.naturalHeight * s;
           g.drawImage(im, (IW - w) / 2, (IH - h) / 2, w, h);
           end({ canvas: cv, score: cors ? scorePixels(im) : null });
@@ -916,29 +945,40 @@ body.busy #board { pointer-events: none; }
       };
       im.onerror = function () { end(null); };
       to = setTimeout(function () { end(null, true); }, 8000);
-      im.src = info.thumbUrl;
+      im.src = pexelsImageUrl(photo);
     }
     attempt(true, function (r, timedOut) {
       if (r || timedOut) { done(r); return; }
       attempt(false, done);
     });
   }
-  // Seeded pick of up to 3 candidate files, one per random category in the theme, scored the
-  // same "best of 3" way as pickPhoto. done(null) means Commons could not produce a usable photo.
-  function pickThemedPhotos(seed, theme, done) {
-    var rand = rng(seed ^ 0x51a2f3c7);
+  // One random query from the trip's theme, a random page of its results, then three photos
+  // not used recently on this trip, keeping the one with the most puzzle-friendly detail.
+  // done(null) means Pexels could not produce a usable photo.
+  function pickPexelsPhoto(theme, tripId, done) {
+    var query = theme.queries[Math.floor(Math.random() * theme.queries.length)];
+    var page = 1 + Math.floor(Math.random() * 5);
     // Wrapped in Promise.resolve().then(...) so that if fetch is entirely unavailable (e.g.
     // the Claude-artifact sandbox, which blocks outside fetches outright) the resulting
     // synchronous throw still lands in the .catch() below instead of escaping uncaught.
     Promise.resolve().then(function () {
-      return Commons.chooseCandidates(theme.categories, rand, { slots: 3, backups: 4 }, { listFiles: cachedListFiles, getImageInfo: commonsImageInfo });
+      return pexelsSearch(query, page).then(function (photos) {
+        // Queries with fewer than `page` pages of results come back empty; use page 1 then.
+        return photos.length || page === 1 ? photos : pexelsSearch(query, 1);
+      });
     })
-      .then(function (candidates) {
-        if (!candidates.length) { done(null); return; }
-        var results = [], pending = candidates.length;
-        candidates.forEach(function (info) {
-          loadCommonsImage(info, function (r) {
-            results.push(r ? { info: info, canvas: r.canvas, score: r.score } : null);
+      .then(function (photos) {
+        var recent = recentIds(tripId);
+        var pool = photos.filter(function (p) { return recent.indexOf(p.id) === -1; });
+        // Every result was used recently: a repeat still beats a generated scene.
+        if (!pool.length) pool = photos.slice();
+        var picks = [];
+        while (picks.length < 3 && pool.length) picks.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
+        if (!picks.length) { done(null); return; }
+        var results = [], pending = picks.length;
+        picks.forEach(function (photo) {
+          loadPexelsImage(photo, function (r) {
+            results.push(r ? { photo: photo, canvas: r.canvas, score: r.score } : null);
             if (--pending === 0) {
               var best = null;
               results.forEach(function (r2) {
@@ -954,60 +994,38 @@ body.busy #board { pointer-events: none; }
       .catch(function () { done(null); });
   }
 
-  function begin(seed, kind, img, name, detail) {
+  function begin(g) {
     cleanSlate();
-    var grid = P.shuffle(rng(seed ^ 0x9e3779b9));
-    openGame({ seed: seed, kind: kind, name: name, img: img, grid: grid, moves: 0, elapsed: 0, solved: false, detail: detail == null ? null : detail });
-    saveGame();
-    if (kind === 'picsum') fetchCredit(seed);
-  }
-  function beginCommons(seed, picked, theme) {
-    cleanSlate();
-    var grid = P.shuffle(rng(seed ^ 0x9e3779b9));
-    openGame({
-      seed: seed, kind: 'commons', img: picked.canvas, grid: grid, moves: 0, elapsed: 0, solved: false,
-      detail: picked.score ? picked.score.score : null,
-      title: picked.info.displayTitle, fileTitle: picked.info.title, pageUrl: picked.info.pageUrl,
-      author: picked.info.author, license: picked.info.license, licenseUrl: picked.info.licenseUrl,
-      themeName: theme.name, themeEmoji: theme.emoji
-    });
+    g.grid = P.shuffle(rng(g.seed ^ 0x9e3779b9));
+    g.moves = 0; g.elapsed = 0; g.solved = false;
+    openGame(g);
     saveGame();
   }
   function newGame() {
     if (busy) return;
     var seed = Math.floor(Math.random() * 2147483647);
-    var theme = T.theme;
-    function withPicsum(toastMsg) {
-      setBusy(true, 'Picking a photo...');
-      pickPhoto(seed, function (r) {
-        setBusy(false);
-        if (r) { begin(r.seed, 'picsum', r.canvas, 'Photo', r.score ? r.score.score : null); if (toastMsg) showToast(toastMsg, 4000); return; }
-        var sc = makeScene(seed);
-        begin(seed, 'scene', sc.canvas, sc.name);
-        showToast('Could not load a photo, so this puzzle uses a generated scene.', 4500);
-      });
+    var theme = T.theme, tripId = T.id;
+    function withScene(toastMsg) {
+      var sc = makeScene(seed);
+      begin({ seed: seed, kind: 'scene', name: sc.name, img: sc.canvas, detail: null });
+      showToast(toastMsg, 4500);
     }
-    if (!theme) { withPicsum(); return; }
+    if (!PEXELS_API_KEY) { withScene('No Pexels API key is set (PEXELS_API_KEY in index.html), so this puzzle uses a generated scene.'); return; }
     setBusy(true, 'Picking a ' + theme.name.toLowerCase() + ' photo...');
     var settled = false, timer = setTimeout(function () {
       if (settled) return; settled = true;
-      withPicsum('Themed photos took too long to load, so this puzzle uses a random photo instead.');
-    }, 8000);
-    pickThemedPhotos(seed, theme, function (best) {
+      setBusy(false);
+      withScene('Photos took too long to load, so this puzzle uses a generated scene.');
+    }, 12000);
+    pickPexelsPhoto(theme, tripId, function (best) {
       if (settled) return; settled = true; clearTimeout(timer);
       setBusy(false);
-      if (best) { beginCommons(seed, best, theme); return; }
-      withPicsum('Could not load ' + theme.name.toLowerCase() + ' photos, so this puzzle uses a random photo instead.');
-    });
-  }
-  function withTimeout(promise, ms) {
-    return new Promise(function (resolve, reject) {
-      var settled = false;
-      var t = setTimeout(function () { if (!settled) { settled = true; reject(new Error('timeout')); } }, ms);
-      promise.then(
-        function (v) { if (!settled) { settled = true; clearTimeout(t); resolve(v); } },
-        function (e) { if (!settled) { settled = true; clearTimeout(t); reject(e); } }
-      );
+      if (!best) { withScene('Could not load ' + theme.name.toLowerCase() + ' photos, so this puzzle uses a generated scene.'); return; }
+      rememberPhoto(tripId, best.photo.id);
+      begin({
+        seed: seed, kind: 'pexels', name: 'Photo', img: best.canvas, detail: best.score ? best.score.score : null,
+        photo: best.photo, themeName: theme.name, themeEmoji: theme.emoji
+      });
     });
   }
   // Resuming deserves more persistence than picking a fresh photo: the player already has
@@ -1024,43 +1042,30 @@ body.busy #board { pointer-events: none; }
     if (busy) return;
     var s = savedGame();
     if (!s) { newGame(); return; }
-    function go(img, kind, name, detail) {
-      openGame({ seed: s.seed, kind: kind, name: name, img: img, grid: s.grid.slice(), moves: s.moves || 0, elapsed: s.elapsed || 0, solved: false, detail: detail == null ? null : detail });
-      if (kind === 'picsum') fetchCredit(s.seed);
+    function go(g) {
+      g.seed = s.seed; g.grid = s.grid.slice(); g.moves = s.moves || 0; g.elapsed = s.elapsed || 0; g.solved = false;
+      openGame(g);
     }
-    function fallbackScene() {
+    function scene(toastMsg) {
       var sc = makeScene(s.seed);
-      go(sc.canvas, 'scene', sc.name);
-      showToast('Could not reload your photo, so the board continues with a generated scene.', 4500);
+      go({ kind: 'scene', name: sc.name, img: sc.canvas, detail: null });
+      if (toastMsg) showToast(toastMsg, 4500);
     }
-    if (s.kind === 'commons') {
+    if (s.kind === 'pexels') {
       setBusy(true, 'Loading your photo...');
-      var theme = T.theme;
-      retrying(function (cb) {
-        withTimeout(commonsImageInfo([s.title]), 8000).then(function (infoByTitle) {
-          var info = infoByTitle[s.title];
-          if (!info) { cb(null); return; }
-          loadCommonsImage(info, function (r) { cb(r ? { r: r, info: info } : null); });
-        }).catch(function () { cb(null); });
-      }, 2, 1500, function (result) {
+      retrying(function (cb) { loadPexelsImage(s.photo, cb); }, 2, 1500, function (r) {
         setBusy(false);
-        if (!result) { fallbackScene(); return; }
-        openGame({
-          seed: s.seed, kind: 'commons', img: result.r.canvas, grid: s.grid.slice(), moves: s.moves || 0, elapsed: s.elapsed || 0, solved: false,
-          detail: result.r.score ? result.r.score.score : null, title: result.info.displayTitle, fileTitle: result.info.title, pageUrl: result.info.pageUrl, author: result.info.author,
-          license: result.info.license, licenseUrl: result.info.licenseUrl, themeName: theme ? theme.name : '', themeEmoji: theme ? theme.emoji : ''
+        if (!r) { scene('Could not reload your photo, so the board continues with a generated scene.'); return; }
+        go({
+          kind: 'pexels', name: 'Photo', img: r.canvas, detail: r.score ? r.score.score : null,
+          photo: s.photo, themeName: T.theme.name, themeEmoji: T.theme.emoji
         });
       });
-    } else if (s.kind === 'picsum') {
-      setBusy(true, 'Loading your photo...');
-      retrying(function (cb) { loadPicsum(s.seed, cb); }, 2, 1500, function (r) {
-        setBusy(false);
-        if (r) { go(r.canvas, 'picsum', 'Photo', r.score ? r.score.score : null); return; }
-        fallbackScene();
-      });
+    } else if (s.kind === 'scene') {
+      scene();
     } else {
-      var sc2 = makeScene(s.seed);
-      go(sc2.canvas, 'scene', sc2.name);
+      // Saves from before the switch to Pexels (Wikimedia Commons or Lorem Picsum photos).
+      scene('Photos now come from Pexels, so this saved board continues with a generated scene.');
     }
   }
   /* Dragging */
@@ -1169,6 +1174,8 @@ body.busy #board { pointer-events: none; }
       $('winTrips').hidden = !more;
       $('winMap').className = more ? 'btn' : 'btn primary';
       $('winPhoto').hidden = true; $('winPhoto').removeAttribute('src'); $('winView').textContent = 'View puzzle';
+      $('winCredit').innerHTML = G.kind === 'pexels' ? pexelsCredit(G.photo) : '';
+      $('winCredit').hidden = G.kind !== 'pexels';
       $('win').hidden = false;
       (more ? $('winTrips') : $('winMap')).focus();
     }, 600);
