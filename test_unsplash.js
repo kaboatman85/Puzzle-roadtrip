@@ -1,7 +1,7 @@
 /* jsdom smoke tests for themed-photo loading: the real index.html (plus logic.js) is loaded
    into a jsdom window with a stubbed fetch/Image/canvas, so these drive the actual app code --
    not a reimplementation of it -- through clicks and localStorage, the same way a browser
-   session would. Covers: a themed Pexels load, Resume reloading the same photo without an API
+   session would. Covers: a themed Unsplash load, Resume reloading the same photo without an API
    call, the 24-hour search cache, skipping recently used photos, the generated-scene fallback
    (no key, API error, no fetch at all), and older saves still resuming. */
 'use strict';
@@ -24,8 +24,8 @@ var INDEX_HTML = read('index.html');
 var BODY = extractBody(INDEX_HTML);
 var INLINE_SCRIPTS = extractInlineScripts(INDEX_HTML);
 var LOGIC_JS = read('logic.js');
-var KEY_LINE = "var PEXELS_API_KEY = '';";
-assert.ok(INDEX_HTML.indexOf(KEY_LINE) !== -1, 'index.html should ship with an empty PEXELS_API_KEY');
+var KEY_LINE = "var UNSPLASH_ACCESS_KEY = '';";
+assert.ok(INDEX_HTML.indexOf(KEY_LINE) !== -1, 'index.html should ship with an empty UNSPLASH_ACCESS_KEY');
 
 function fakeCtx2d() {
   var noop = function () {};
@@ -42,7 +42,7 @@ function fakeCtx2d() {
 
 // Builds a fresh jsdom window with the real app scripts loaded in the same order the page
 // uses them (logic.js, then index.html's inline blocks). `key` replaces the empty
-// PEXELS_API_KEY ('' keeps it empty). `beforeMain` runs before the inline scripts, so a test
+// UNSPLASH_ACCESS_KEY ('' keeps it empty). `beforeMain` runs before the inline scripts, so a test
 // can pre-seed localStorage -- exactly like a returning visitor would have an existing save.
 function buildDom(opts) {
   opts = opts || {};
@@ -87,7 +87,7 @@ function buildDom(opts) {
   }
   run(LOGIC_JS);
   if (opts.beforeMain) opts.beforeMain(window);
-  INLINE_SCRIPTS.forEach(function (src) { run(src.replace(KEY_LINE, "var PEXELS_API_KEY = '" + key + "';")); });
+  INLINE_SCRIPTS.forEach(function (src) { run(src.replace(KEY_LINE, "var UNSPLASH_ACCESS_KEY = '" + key + "';")); });
   return dom;
 }
 
@@ -105,38 +105,40 @@ function waitFor(fn, timeoutMs) {
 }
 function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
 
-// --- Canned Pexels API responses ---------------------------------------------------------
+// --- Canned Unsplash API responses -------------------------------------------------------
 
 function apiPhoto(id) {
   return {
-    id: id, width: 3000, height: 4000, url: 'https://www.pexels.com/photo/landmark-' + id + '/',
-    photographer: 'Jane Photographer', photographer_url: 'https://www.pexels.com/@jane',
-    src: { original: 'https://images.pexels.com/photos/' + id + '/pexels-photo-' + id + '.jpeg', large: 'unused' },
-    alt: 'A landmark'
+    id: 'ph' + id, width: 3000, height: 4000,
+    urls: { raw: 'https://images.unsplash.com/photo-' + id + '?ixid=abc&ixlib=rb-4.0.3', regular: 'unused' },
+    links: { html: 'https://unsplash.com/photos/ph' + id, download_location: 'https://api.unsplash.com/photos/ph' + id + '/download?ixid=abc' },
+    user: { name: 'Jane Photographer', username: 'jane', links: { html: 'https://unsplash.com/@jane' } },
+    alt_description: 'A landmark'
   };
 }
 function jsonResponse(obj, status) {
   status = status || 200;
   return Promise.resolve({ ok: status < 400, status: status, json: function () { return Promise.resolve(obj); } });
 }
-// Every search returns photos 1..40 for whatever page was asked for, offset by page.
-function pexelsFetchOk(url) {
-  var u = new URL(String(url)), page = +u.searchParams.get('page'), photos = [];
-  for (var i = 1; i <= 40; i++) photos.push(apiPhoto(page * 1000 + i));
-  return jsonResponse({ page: page, per_page: 40, photos: photos });
+// Every search returns 30 photos for whatever page was asked for, offset by page.
+function unsplashFetchOk(url) {
+  var u = new URL(String(url)), page = +u.searchParams.get('page'), results = [];
+  for (var i = 1; i <= 30; i++) results.push(apiPhoto(page * 1000 + i));
+  return jsonResponse({ total: 600, total_pages: 20, results: results });
 }
-function isPexelsApi(url) { return String(url).indexOf('https://api.pexels.com/v1/search') === 0; }
+function isSearchApi(url) { return String(url).indexOf('https://api.unsplash.com/search/photos') === 0; }
+function isDownloadPing(url) { return /^https:\/\/api\.unsplash\.com\/photos\/[^/]+\/download/.test(String(url)); }
 function grid() { return Array.from({ length: 64 }, function (_, i) { return i; }); }
-function savedPhoto(id) { return { id: id, src: 'https://images.pexels.com/photos/' + id + '/pexels-photo-' + id + '.jpeg', by: 'Sam Shooter', byUrl: 'https://www.pexels.com/@sam', url: 'https://www.pexels.com/photo/' + id + '/' }; }
+function savedPhoto(id) { return { id: 'ph' + id, src: 'https://images.unsplash.com/photo-' + id + '?ixid=abc', by: 'Sam Shooter', byUrl: 'https://unsplash.com/@sam', dl: '' }; }
 var SEA_KEY_QUERIES = ['famous buildings', 'monument', 'landmark', 'architecture'];
 function seedCache(window, photosFor) {
   SEA_KEY_QUERIES.forEach(function (q) {
     for (var p = 1; p <= 5; p++) {
-      window.localStorage.setItem('puzzleRoad.pexels.search:' + q + '|' + p, JSON.stringify({ at: Date.now(), photos: photosFor(q, p) }));
+      window.localStorage.setItem('puzzleRoad.unsplash.search:' + q + '|' + p, JSON.stringify({ at: Date.now(), photos: photosFor(q, p) }));
     }
   });
 }
-function cachedPhoto(id) { return { id: id, src: 'https://images.pexels.com/photos/' + id + '/p.jpeg', by: 'Cache Person', byUrl: 'https://www.pexels.com/@cache', url: 'https://www.pexels.com/photo/' + id + '/' }; }
+function cachedPhoto(id) { return { id: id, src: 'https://images.unsplash.com/photo-' + id + '?ixid=abc', by: 'Cache Person', byUrl: 'https://unsplash.com/@cache', dl: '' }; }
 
 async function startAndWait(document) {
   var startBtn = await waitFor(function () { return document.getElementById('startBtn'); });
@@ -150,46 +152,52 @@ function saved(window) { return JSON.parse(window.localStorage.getItem('puzzleRo
 var tests = [];
 function test(name, fn) { tests.push({ name: name, fn: fn }); }
 
-test('themed load: searches Pexels with the right params, credits the photographer, saves the photo', async function () {
+test('themed load: searches Unsplash with the right params, credits the photographer, saves the photo', async function () {
   var calls = [];
   var dom = buildDom({
     fetchImpl: function (url, init) {
       calls.push({ url: String(url), init: init });
-      if (isPexelsApi(url)) return pexelsFetchOk(url);
+      if (isSearchApi(url)) return unsplashFetchOk(url);
+      if (isDownloadPing(url)) return jsonResponse({ url: 'unused' });
       return Promise.reject(new Error('unexpected fetch: ' + url));
     }
   });
   try {
     var window = dom.window, document = window.document;
     await startAndWait(document);
-    assert.strictEqual(calls.length, 1, 'one search per new puzzle');
-    var u = new URL(calls[0].url);
+    var searches = calls.filter(function (c) { return isSearchApi(c.url); });
+    assert.strictEqual(searches.length, 1, 'one search per new puzzle');
+    var u = new URL(searches[0].url);
     assert.ok(SEA_KEY_QUERIES.indexOf(u.searchParams.get('query')) !== -1, 'query should come from the trip theme: ' + u.searchParams.get('query'));
     assert.strictEqual(u.searchParams.get('orientation'), 'portrait');
-    assert.strictEqual(u.searchParams.get('size'), 'large');
-    assert.strictEqual(u.searchParams.get('per_page'), '40');
+    assert.strictEqual(u.searchParams.get('content_filter'), 'high');
+    assert.strictEqual(u.searchParams.get('per_page'), '30');
     var page = +u.searchParams.get('page');
     assert.ok(page >= 1 && page <= 5, 'page should be 1-5, got ' + page);
-    assert.strictEqual(calls[0].init.headers.Authorization, 'test-key', 'key goes in the Authorization header');
+    assert.strictEqual(searches[0].init.headers.Authorization, 'Client-ID test-key', 'key goes in the Authorization header');
 
     var caption = document.getElementById('caption').innerHTML;
     assert.ok(/Famous buildings and monuments/.test(caption), 'caption should show the theme: ' + caption);
-    assert.ok(/Photo by <a href="https:\/\/www\.pexels\.com\/@jane"[^>]*>Jane Photographer<\/a> on <a href="https:\/\/www\.pexels\.com\/photo\/landmark-\d+\/"[^>]*>Pexels<\/a>/.test(caption),
-      'caption should credit the photographer and link Pexels: ' + caption);
+    assert.ok(/Photo by <a href="https:\/\/unsplash\.com\/@jane\?utm_source=puzzle_road_trip&amp;utm_medium=referral"[^>]*>Jane Photographer<\/a> on <a href="https:\/\/unsplash\.com\/\?utm_source=puzzle_road_trip&amp;utm_medium=referral"[^>]*>Unsplash<\/a>/.test(caption),
+      'caption should credit the photographer and link Unsplash with referral tags: ' + caption);
 
     var s = saved(window);
-    assert.strictEqual(s.kind, 'pexels');
-    assert.ok(s.photo && /^https:\/\/images\.pexels\.com\//.test(s.photo.src), 'save should hold the photo record');
+    assert.strictEqual(s.kind, 'unsplash');
+    assert.ok(s.photo && /^https:\/\/images\.unsplash\.com\//.test(s.photo.src), 'save should hold the photo record');
     assert.strictEqual(s.grid.length, 64);
-    assert.ok(window.__imageSrcs.every(function (src) { return /\?auto=compress&cs=tinysrgb&w=1280&h=1600&fit=crop$/.test(src); }),
+    assert.ok(window.__imageSrcs.every(function (src) { return /\?ixid=abc&ixlib=rb-4\.0\.3&w=1280&h=1600&fit=crop&crop=entropy&auto=format&q=80$/.test(src); }),
       'images should load at the board size: ' + window.__imageSrcs.join(', '));
     assert.strictEqual(new Set(window.__imageSrcs).size, 3, 'three candidates should be tried');
 
-    var recent = JSON.parse(window.localStorage.getItem('puzzleRoad.pexels.recent.v1'));
+    var recent = JSON.parse(window.localStorage.getItem('puzzleRoad.unsplash.recent.v1'));
     assert.deepStrictEqual(recent['sea-key'], [s.photo.id], 'the chosen photo should be remembered');
-    var cacheKey = 'puzzleRoad.pexels.search:' + u.searchParams.get('query') + '|' + page;
+    var cacheKey = 'puzzleRoad.unsplash.search:' + u.searchParams.get('query') + '|' + page;
     var cached = JSON.parse(window.localStorage.getItem(cacheKey));
-    assert.ok(cached && cached.photos.length === 40, 'the search should be cached');
+    assert.ok(cached && cached.photos.length === 30, 'the search should be cached');
+    var pings = calls.filter(function (c) { return isDownloadPing(c.url); });
+    assert.strictEqual(pings.length, 1, 'the chosen photo should be reported to the download endpoint once');
+    assert.strictEqual(pings[0].url, s.photo.dl);
+    assert.strictEqual(pings[0].init.headers.Authorization, 'Client-ID test-key');
   } finally { dom.window.close(); }
 });
 
@@ -197,7 +205,7 @@ test('round trip: Map then Resume reloads the same photo with no extra API call'
   var apiCalls = 0;
   var dom = buildDom({
     fetchImpl: function (url) {
-      if (isPexelsApi(url)) { apiCalls++; return pexelsFetchOk(url); }
+      if (isSearchApi(url)) { apiCalls++; return unsplashFetchOk(url); }
       return Promise.reject(new Error('unexpected fetch: ' + url));
     }
   });
@@ -212,7 +220,7 @@ test('round trip: Map then Resume reloads the same photo with no extra API call'
     resumeBtn.click();
     await waitFor(function () { return !document.getElementById('gameView').hidden; }, 4000);
     assert.strictEqual(apiCalls, 1, 'resume should not search again');
-    assert.strictEqual(saved(window).kind, 'pexels', 'should resume the real photo, not fall back to a scene');
+    assert.strictEqual(saved(window).kind, 'unsplash', 'should resume the real photo, not fall back to a scene');
     assert.deepStrictEqual(saved(window).photo, photoBefore);
     assert.strictEqual(document.getElementById('caption').innerHTML, captionBefore, 'resumed caption should match exactly');
   } finally { dom.window.close(); }
@@ -224,7 +232,7 @@ test('resume loads the exact saved photo and keeps moves', async function () {
     fetchImpl: function (url) { return Promise.reject(new Error('resume should not fetch: ' + url)); },
     beforeMain: function (window) {
       window.localStorage.setItem('puzzleRoad.journey.v1', JSON.stringify({ solved: 1, current: 'sea-key', trips: { 'sea-key': { miles: 100, done: false } } }));
-      window.localStorage.setItem('puzzleRoad.game.v1', JSON.stringify({ kind: 'pexels', seed: 777, grid: grid(), moves: 2, elapsed: 1000, photo: photo }));
+      window.localStorage.setItem('puzzleRoad.game.v1', JSON.stringify({ kind: 'unsplash', seed: 777, grid: grid(), moves: 2, elapsed: 1000, photo: photo }));
     }
   });
   try {
@@ -232,7 +240,7 @@ test('resume loads the exact saved photo and keeps moves', async function () {
     var resumeBtn = await waitFor(function () { return document.getElementById('resumeBtn'); });
     resumeBtn.click();
     await waitFor(function () { return !document.getElementById('gameView').hidden; }, 4000);
-    assert.ok(window.__imageSrcs[0].indexOf(photo.src + '?') === 0, 'should load the saved photo: ' + window.__imageSrcs[0]);
+    assert.ok(window.__imageSrcs[0].indexOf(photo.src + '&w=1280') === 0, 'should load the saved photo: ' + window.__imageSrcs[0]);
     assert.ok(/Sam Shooter/.test(document.getElementById('caption').innerHTML));
     assert.strictEqual(saved(window).moves, 2);
     assert.deepStrictEqual(saved(window).photo, photo);
@@ -246,7 +254,7 @@ test('resume survives a transient failure (fails once, then succeeds on retry)',
     imageShouldFail: function () { return ++loads <= 2; },
     beforeMain: function (window) {
       window.localStorage.setItem('puzzleRoad.journey.v1', JSON.stringify({ solved: 1, current: 'sea-key', trips: { 'sea-key': { miles: 100, done: false } } }));
-      window.localStorage.setItem('puzzleRoad.game.v1', JSON.stringify({ kind: 'pexels', seed: 5, grid: grid(), moves: 4, elapsed: 500, photo: savedPhoto(55) }));
+      window.localStorage.setItem('puzzleRoad.game.v1', JSON.stringify({ kind: 'unsplash', seed: 5, grid: grid(), moves: 4, elapsed: 500, photo: savedPhoto(55) }));
     }
   });
   try {
@@ -254,7 +262,7 @@ test('resume survives a transient failure (fails once, then succeeds on retry)',
     var resumeBtn = await waitFor(function () { return document.getElementById('resumeBtn'); });
     resumeBtn.click();
     await waitFor(function () { return !document.getElementById('gameView').hidden; }, 6000);
-    assert.strictEqual(saved(window).kind, 'pexels', 'should recover the real photo, not fall back to a scene');
+    assert.strictEqual(saved(window).kind, 'unsplash', 'should recover the real photo, not fall back to a scene');
     assert.ok(loads > 2, 'should have actually retried');
   } finally { dom.window.close(); }
 });
@@ -270,7 +278,7 @@ test('a fresh cached search is used instead of calling the API; empty pages fall
   try {
     var window = dom.window, document = window.document;
     await startAndWait(document);
-    assert.strictEqual(saved(window).kind, 'pexels');
+    assert.strictEqual(saved(window).kind, 'unsplash');
     assert.ok([9001, 9002].indexOf(saved(window).photo.id) !== -1);
   } finally { dom.window.close(); }
 });
@@ -278,11 +286,11 @@ test('a fresh cached search is used instead of calling the API; empty pages fall
 test('a cached search older than 24 hours is fetched again', async function () {
   var apiCalls = 0;
   var dom = buildDom({
-    fetchImpl: function (url) { if (isPexelsApi(url)) { apiCalls++; return pexelsFetchOk(url); } return Promise.reject(new Error('unexpected fetch: ' + url)); },
+    fetchImpl: function (url) { if (isSearchApi(url)) { apiCalls++; return unsplashFetchOk(url); } return Promise.reject(new Error('unexpected fetch: ' + url)); },
     beforeMain: function (window) {
       SEA_KEY_QUERIES.forEach(function (q) {
         for (var p = 1; p <= 5; p++) {
-          window.localStorage.setItem('puzzleRoad.pexels.search:' + q + '|' + p, JSON.stringify({ at: Date.now() - 25 * 3600 * 1000, photos: [cachedPhoto(1)] }));
+          window.localStorage.setItem('puzzleRoad.unsplash.search:' + q + '|' + p, JSON.stringify({ at: Date.now() - 25 * 3600 * 1000, photos: [cachedPhoto(1)] }));
         }
       });
     }
@@ -300,7 +308,7 @@ test('recently used photos are skipped', async function () {
     fetchImpl: function (url) { return Promise.reject(new Error('unexpected fetch: ' + url)); },
     beforeMain: function (window) {
       seedCache(window, function () { return [cachedPhoto(1), cachedPhoto(2), cachedPhoto(3), cachedPhoto(4)]; });
-      window.localStorage.setItem('puzzleRoad.pexels.recent.v1', JSON.stringify({ 'sea-key': [1, 2, 3] }));
+      window.localStorage.setItem('puzzleRoad.unsplash.recent.v1', JSON.stringify({ 'sea-key': [1, 2, 3] }));
     }
   });
   try {
@@ -308,7 +316,7 @@ test('recently used photos are skipped', async function () {
     await startAndWait(document);
     assert.strictEqual(saved(window).photo.id, 4, 'the only photo not used recently should be picked');
     assert.strictEqual(new Set(window.__imageSrcs).size, 1, 'recent photos should not even be loaded');
-    var recent = JSON.parse(window.localStorage.getItem('puzzleRoad.pexels.recent.v1'));
+    var recent = JSON.parse(window.localStorage.getItem('puzzleRoad.unsplash.recent.v1'));
     assert.deepStrictEqual(recent['sea-key'], [1, 2, 3, 4]);
   } finally { dom.window.close(); }
 });
@@ -318,13 +326,13 @@ test('the recent list keeps only the last 50 ids per trip', async function () {
     fetchImpl: function (url) { return Promise.reject(new Error('unexpected fetch: ' + url)); },
     beforeMain: function (window) {
       seedCache(window, function () { return [cachedPhoto(999)]; });
-      window.localStorage.setItem('puzzleRoad.pexels.recent.v1', JSON.stringify({ 'sea-key': Array.from({ length: 50 }, function (_, i) { return i; }), 'route66': [7] }));
+      window.localStorage.setItem('puzzleRoad.unsplash.recent.v1', JSON.stringify({ 'sea-key': Array.from({ length: 50 }, function (_, i) { return i; }), 'route66': [7] }));
     }
   });
   try {
     var window = dom.window, document = window.document;
     await startAndWait(document);
-    var recent = JSON.parse(window.localStorage.getItem('puzzleRoad.pexels.recent.v1'));
+    var recent = JSON.parse(window.localStorage.getItem('puzzleRoad.unsplash.recent.v1'));
     assert.strictEqual(recent['sea-key'].length, 50);
     assert.strictEqual(recent['sea-key'][49], 999);
     assert.strictEqual(recent['sea-key'][0], 1, 'the oldest id should drop off');
@@ -340,7 +348,7 @@ test('no API key: generated scene, no network', async function () {
     await startAndWait(document);
     assert.strictEqual(saved(window).kind, 'scene');
     assert.strictEqual(calls, 0);
-    assert.ok(/PEXELS_API_KEY/.test(document.getElementById('toast').textContent), 'toast should say the key is missing');
+    assert.ok(/UNSPLASH_ACCESS_KEY/.test(document.getElementById('toast').textContent), 'toast should say the key is missing');
   } finally { dom.window.close(); }
 });
 
@@ -355,7 +363,7 @@ test('an API error falls back to a generated scene', async function () {
 
 test('photos that all fail to load fall back to a generated scene', async function () {
   var dom = buildDom({
-    fetchImpl: function (url) { return isPexelsApi(url) ? pexelsFetchOk(url) : Promise.reject(new Error('unexpected')); },
+    fetchImpl: function (url) { return isSearchApi(url) ? unsplashFetchOk(url) : Promise.reject(new Error('unexpected')); },
     imageShouldFail: function () { return true; }
   });
   try {
@@ -385,8 +393,8 @@ test('a full localStorage drops the search cache rather than losing the game sav
       // Simulate a full quota: refuse any write while cached searches are still present.
       var proto = Object.getPrototypeOf(window.localStorage), realSet = proto.setItem;
       proto.setItem = function (k, v) {
-        if (k.indexOf('puzzleRoad.pexels.search:') !== 0) {
-          for (var i = 0; i < this.length; i++) if (this.key(i).indexOf('puzzleRoad.pexels.search:') === 0) throw new Error('QuotaExceededError');
+        if (k.indexOf('puzzleRoad.unsplash.search:') !== 0) {
+          for (var i = 0; i < this.length; i++) if (this.key(i).indexOf('puzzleRoad.unsplash.search:') === 0) throw new Error('QuotaExceededError');
         }
         return realSet.call(this, k, v);
       };
@@ -396,7 +404,7 @@ test('a full localStorage drops the search cache rather than losing the game sav
     var window = dom.window, document = window.document;
     await startAndWait(document);
     var s = saved(window);
-    assert.ok(s && s.kind === 'pexels', 'the game should still be saved');
+    assert.ok(s && s.kind === 'unsplash', 'the game should still be saved');
   } finally { dom.window.close(); }
 });
 

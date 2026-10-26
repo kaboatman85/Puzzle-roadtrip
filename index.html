@@ -15,13 +15,14 @@
 <meta name="apple-mobile-web-app-title" content="Road Trip">
 <style>html,body{margin:0}:root{color-scheme:light}[hidden]{display:none!important}</style>
 <script>
-/* ================== PEXELS API KEY ==================
-   Paste your key from https://www.pexels.com/api/ between the quotes.
+/* ================== UNSPLASH ACCESS KEY ==================
+   Paste your app's Access Key from https://unsplash.com/oauth/applications between the quotes
+   (the Access Key, not the Secret Key).
    WARNING: this key is visible to anyone. The site is served from GitHub Pages, so this file
-   is public both in the repo and in the page source. A Pexels key only allows photo searches,
+   is public both in the repo and in the page source. An Unsplash Access Key only allows photo searches,
    but someone could copy it and use up your rate limit. Leave it empty ('') to play with
    generated scenes instead of photos. */
-var PEXELS_API_KEY = '';
+var UNSPLASH_ACCESS_KEY = '';
 </script>
 </head>
 <body>
@@ -250,12 +251,12 @@ body.busy #board { pointer-events: none; }
   var STORE_J = 'puzzleRoad.journey.v1', STORE_G = 'puzzleRoad.game.v1';
   function $(id) { return document.getElementById(id); }
   function lsGet(k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } }
-  // If storage is full, drop the Pexels search cache (it's only a cache) and try once more, so
+  // If storage is full, drop the Unsplash search cache (it's only a cache) and try once more, so
   // cached searches can never crowd out the saved game or journey.
   function lsSet(k, v) {
     var str = JSON.stringify(v);
     try { localStorage.setItem(k, str); } catch (e) {
-      clearPexelsCache(true);
+      clearUnsplashCache(true);
       try { localStorage.setItem(k, str); } catch (e2) {}
     }
   }
@@ -264,7 +265,7 @@ body.busy #board { pointer-events: none; }
   var reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   /* ---------- Trips ---------- */
-  // theme.queries: Pexels searches for that trip's photos. Each puzzle picks one at random,
+  // theme.queries: Unsplash searches for that trip's photos. Each puzzle picks one at random,
   // so more (and more varied) queries mean more variety. Edit freely.
   var TRIPS = [
     { id: 'sea-key', name: 'Seattle to Key West', from: 'Seattle, WA', to: 'Key West, FL',
@@ -575,7 +576,7 @@ body.busy #board { pointer-events: none; }
     if (g && Array.isArray(g.grid) && g.grid.length === N && isFinite(g.seed)) {
       var seen = {}, ok = true;
       g.grid.forEach(function (v) { if (typeof v !== 'number' || v < 0 || v >= N || seen[v]) ok = false; seen[v] = 1; });
-      if (ok && g.kind === 'pexels' && !(g.photo && typeof g.photo.src === 'string')) ok = false;
+      if (ok && g.kind === 'unsplash' && !(g.photo && typeof g.photo.src === 'string')) ok = false;
       if (ok) return g;
     }
     return null;
@@ -791,28 +792,33 @@ body.busy #board { pointer-events: none; }
     if (!G || G.solved) return;
     var rec = { kind: G.kind, seed: G.seed, grid: G.grid, moves: G.moves, elapsed: Math.round(G.elapsed) };
     // The whole photo record is saved, so Resume reloads the same picture without an API call.
-    if (G.kind === 'pexels') rec.photo = G.photo;
+    if (G.kind === 'unsplash') rec.photo = G.photo;
     lsSet(STORE_G, rec);
   }
   function cleanSlate() { lsDel(STORE_G); }
 
-  // Photographer names and URLs come from the Pexels API and go into innerHTML (for the
+  // Photographer names and URLs come from the Unsplash API and go into innerHTML (for the
   // attribution links), so they are escaped, and only https links are allowed.
   function escapeHtml(s) {
     return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
-  function safeUrl(u) { return /^https:\/\//.test(String(u)) ? String(u) : 'https://www.pexels.com/'; }
-  // "Photo by <photographer> on Pexels", as the Pexels API guidelines require.
-  function pexelsCredit(ph) {
-    return 'Photo by <a href="' + escapeHtml(safeUrl(ph.byUrl)) + '" target="_blank" rel="noopener">' + escapeHtml(ph.by) + '</a>' +
-      ' on <a href="' + escapeHtml(safeUrl(ph.url)) + '" target="_blank" rel="noopener">Pexels</a>';
+  // "Photo by <photographer> on Unsplash", linked with the referral tags the Unsplash API
+  // guidelines require.
+  var UTM = 'utm_source=puzzle_road_trip&utm_medium=referral';
+  function withUtm(u) {
+    u = /^https:\/\//.test(String(u)) ? String(u) : 'https://unsplash.com/';
+    return u + (u.indexOf('?') === -1 ? '?' : '&') + UTM;
+  }
+  function unsplashCredit(ph) {
+    return 'Photo by <a href="' + escapeHtml(withUtm(ph.byUrl)) + '" target="_blank" rel="noopener">' + escapeHtml(ph.by) + '</a>' +
+      ' on <a href="' + escapeHtml(withUtm('https://unsplash.com/')) + '" target="_blank" rel="noopener">Unsplash</a>';
   }
 
   function updateCaption() {
     if (!G) return;
-    if (G.kind === 'pexels') {
+    if (G.kind === 'unsplash') {
       var themeBit = G.themeEmoji ? G.themeEmoji + ' ' + G.themeName : (G.themeName || 'Themed photo');
-      $('caption').innerHTML = escapeHtml(themeBit) + ' &middot; ' + pexelsCredit(G.photo) +
+      $('caption').innerHTML = escapeHtml(themeBit) + ' &middot; ' + unsplashCredit(G.photo) +
         (G.detail != null ? ' &middot; detail ' + G.detail + '/10' : '') + ' &middot; 100 miles to earn';
       return;
     }
@@ -853,7 +859,7 @@ body.busy #board { pointer-events: none; }
       el.classList.toggle('bt', b.t); el.classList.toggle('br', b.r); el.classList.toggle('bb', b.b); el.classList.toggle('bl', b.l);
     }
   }
-  /* ---------- Photos (Pexels) ---------- */
+  /* ---------- Photos (Unsplash) ---------- */
   var busy = false, toastTimer = 0;
   function showToast(msg, ms) {
     var el = $('toast'); clearTimeout(toastTimer);
@@ -876,36 +882,41 @@ body.busy #board { pointer-events: none; }
   }
 
   // Search responses are cached in localStorage for 24 hours (trimmed to the fields used here)
-  // to stay well under the Pexels rate limits (200 requests/hour, 20,000/month).
-  var PEXELS_CACHE = 'puzzleRoad.pexels.search:', PEXELS_CACHE_MS = 24 * 3600 * 1000;
-  var STORE_RECENT = 'puzzleRoad.pexels.recent.v1', RECENT_MAX = 50;
-  function clearPexelsCache(all) {
+  // to stay well under the Unsplash rate limit (50 requests/hour for a new app).
+  var UNSPLASH_CACHE = 'puzzleRoad.unsplash.search:', UNSPLASH_CACHE_MS = 24 * 3600 * 1000;
+  var STORE_RECENT = 'puzzleRoad.unsplash.recent.v1', RECENT_MAX = 50;
+  function clearUnsplashCache(all) {
     try {
       for (var i = localStorage.length - 1; i >= 0; i--) {
         var k = localStorage.key(i);
-        if (!k || k.indexOf(PEXELS_CACHE) !== 0) continue;
+        if (!k || k.indexOf(UNSPLASH_CACHE) !== 0) continue;
         var c = all ? null : lsGet(k);
-        if (!c || !(Date.now() - c.at < PEXELS_CACHE_MS)) localStorage.removeItem(k);
+        if (!c || !(Date.now() - c.at < UNSPLASH_CACHE_MS)) localStorage.removeItem(k);
       }
     } catch (e) {}
   }
-  function pexelsSearch(query, page) {
-    var key = PEXELS_CACHE + query + '|' + page, c = lsGet(key);
-    if (c && Date.now() - c.at < PEXELS_CACHE_MS && Array.isArray(c.photos)) return Promise.resolve(c.photos);
-    var url = 'https://api.pexels.com/v1/search?query=' + encodeURIComponent(query) +
-      '&orientation=portrait&size=large&per_page=40&page=' + page;
-    return fetch(url, { headers: { Authorization: PEXELS_API_KEY } })
+  function unsplashSearch(query, page) {
+    var key = UNSPLASH_CACHE + query + '|' + page, c = lsGet(key);
+    if (c && Date.now() - c.at < UNSPLASH_CACHE_MS && Array.isArray(c.photos)) return Promise.resolve(c.photos);
+    // content_filter=high keeps results family-friendly.
+    var url = 'https://api.unsplash.com/search/photos?query=' + encodeURIComponent(query) +
+      '&orientation=portrait&content_filter=high&per_page=30&page=' + page;
+    return fetch(url, { headers: { Authorization: 'Client-ID ' + UNSPLASH_ACCESS_KEY, 'Accept-Version': 'v1' } })
       .then(function (r) {
-        if (!r.ok) throw new Error('Pexels search failed: HTTP ' + r.status);
+        if (!r.ok) throw new Error('Unsplash search failed: HTTP ' + r.status);
         return r.json();
       })
       .then(function (j) {
-        var photos = (j && Array.isArray(j.photos) ? j.photos : [])
-          .filter(function (p) { return p && p.id && p.src && typeof p.src.original === 'string'; })
+        var photos = (j && Array.isArray(j.results) ? j.results : [])
+          .filter(function (p) { return p && p.id && p.urls && typeof p.urls.raw === 'string'; })
           .map(function (p) {
-            return { id: p.id, src: p.src.original, by: String(p.photographer || 'Unknown photographer'), byUrl: p.photographer_url || '', url: p.url || '' };
+            var u = p.user || {};
+            return {
+              id: p.id, src: p.urls.raw, by: String(u.name || u.username || 'Unknown photographer'),
+              byUrl: (u.links && u.links.html) || '', dl: (p.links && p.links.download_location) || ''
+            };
           });
-        clearPexelsCache(false);
+        clearUnsplashCache(false);
         lsSet(key, { at: Date.now(), photos: photos });
         return photos;
       });
@@ -923,13 +934,20 @@ body.busy #board { pointer-events: none; }
     r[tripId] = list.slice(-RECENT_MAX);
     lsSet(STORE_RECENT, r);
   }
-  // Pexels resizes and crops on its side, so this arrives at exactly the board's 1280x1600.
-  function pexelsImageUrl(photo) {
-    return photo.src + '?auto=compress&cs=tinysrgb&w=' + IW + '&h=' + IH + '&fit=crop';
+  // Unsplash resizes and crops on its side, so this arrives at exactly the board's 1280x1600.
+  // The raw URL already carries its own query string.
+  function unsplashImageUrl(photo) {
+    return photo.src + (photo.src.indexOf('?') === -1 ? '?' : '&') + 'w=' + IW + '&h=' + IH + '&fit=crop&crop=entropy&auto=format&q=80';
+  }
+  // The Unsplash API guidelines ask apps to report when a photo is actually put to use (here:
+  // chosen for a puzzle) so the photographer's download count is credited. Fire and forget.
+  function trackDownload(photo) {
+    if (!photo.dl || !/^https:\/\/api\.unsplash\.com\//.test(photo.dl)) return;
+    try { fetch(photo.dl, { headers: { Authorization: 'Client-ID ' + UNSPLASH_ACCESS_KEY, 'Accept-Version': 'v1' } }).catch(function () {}); } catch (e) {}
   }
   // Try with CORS (for scoring), fall back to a plain (unscored) load if the host or network
   // refuses it. The draw still cover-fits, in case a photo comes back at another size.
-  function loadPexelsImage(photo, done) {
+  function loadUnsplashImage(photo, done) {
     function attempt(cors, next) {
       var im = new Image(), finished = false, to = 0;
       function end(r, timedOut) { if (finished) return; finished = true; clearTimeout(to); next(r, timedOut); }
@@ -945,7 +963,7 @@ body.busy #board { pointer-events: none; }
       };
       im.onerror = function () { end(null); };
       to = setTimeout(function () { end(null, true); }, 8000);
-      im.src = pexelsImageUrl(photo);
+      im.src = unsplashImageUrl(photo);
     }
     attempt(true, function (r, timedOut) {
       if (r || timedOut) { done(r); return; }
@@ -954,17 +972,17 @@ body.busy #board { pointer-events: none; }
   }
   // One random query from the trip's theme, a random page of its results, then three photos
   // not used recently on this trip, keeping the one with the most puzzle-friendly detail.
-  // done(null) means Pexels could not produce a usable photo.
-  function pickPexelsPhoto(theme, tripId, done) {
+  // done(null) means Unsplash could not produce a usable photo.
+  function pickUnsplashPhoto(theme, tripId, done) {
     var query = theme.queries[Math.floor(Math.random() * theme.queries.length)];
     var page = 1 + Math.floor(Math.random() * 5);
     // Wrapped in Promise.resolve().then(...) so that if fetch is entirely unavailable (e.g.
     // the Claude-artifact sandbox, which blocks outside fetches outright) the resulting
     // synchronous throw still lands in the .catch() below instead of escaping uncaught.
     Promise.resolve().then(function () {
-      return pexelsSearch(query, page).then(function (photos) {
+      return unsplashSearch(query, page).then(function (photos) {
         // Queries with fewer than `page` pages of results come back empty; use page 1 then.
-        return photos.length || page === 1 ? photos : pexelsSearch(query, 1);
+        return photos.length || page === 1 ? photos : unsplashSearch(query, 1);
       });
     })
       .then(function (photos) {
@@ -977,7 +995,7 @@ body.busy #board { pointer-events: none; }
         if (!picks.length) { done(null); return; }
         var results = [], pending = picks.length;
         picks.forEach(function (photo) {
-          loadPexelsImage(photo, function (r) {
+          loadUnsplashImage(photo, function (r) {
             results.push(r ? { photo: photo, canvas: r.canvas, score: r.score } : null);
             if (--pending === 0) {
               var best = null;
@@ -1010,20 +1028,21 @@ body.busy #board { pointer-events: none; }
       begin({ seed: seed, kind: 'scene', name: sc.name, img: sc.canvas, detail: null });
       showToast(toastMsg, 4500);
     }
-    if (!PEXELS_API_KEY) { withScene('No Pexels API key is set (PEXELS_API_KEY in index.html), so this puzzle uses a generated scene.'); return; }
+    if (!UNSPLASH_ACCESS_KEY) { withScene('No Unsplash key is set (UNSPLASH_ACCESS_KEY in index.html), so this puzzle uses a generated scene.'); return; }
     setBusy(true, 'Picking a ' + theme.name.toLowerCase() + ' photo...');
     var settled = false, timer = setTimeout(function () {
       if (settled) return; settled = true;
       setBusy(false);
       withScene('Photos took too long to load, so this puzzle uses a generated scene.');
     }, 12000);
-    pickPexelsPhoto(theme, tripId, function (best) {
+    pickUnsplashPhoto(theme, tripId, function (best) {
       if (settled) return; settled = true; clearTimeout(timer);
       setBusy(false);
       if (!best) { withScene('Could not load ' + theme.name.toLowerCase() + ' photos, so this puzzle uses a generated scene.'); return; }
       rememberPhoto(tripId, best.photo.id);
+      trackDownload(best.photo);
       begin({
-        seed: seed, kind: 'pexels', name: 'Photo', img: best.canvas, detail: best.score ? best.score.score : null,
+        seed: seed, kind: 'unsplash', name: 'Photo', img: best.canvas, detail: best.score ? best.score.score : null,
         photo: best.photo, themeName: theme.name, themeEmoji: theme.emoji
       });
     });
@@ -1051,21 +1070,21 @@ body.busy #board { pointer-events: none; }
       go({ kind: 'scene', name: sc.name, img: sc.canvas, detail: null });
       if (toastMsg) showToast(toastMsg, 4500);
     }
-    if (s.kind === 'pexels') {
+    if (s.kind === 'unsplash') {
       setBusy(true, 'Loading your photo...');
-      retrying(function (cb) { loadPexelsImage(s.photo, cb); }, 2, 1500, function (r) {
+      retrying(function (cb) { loadUnsplashImage(s.photo, cb); }, 2, 1500, function (r) {
         setBusy(false);
         if (!r) { scene('Could not reload your photo, so the board continues with a generated scene.'); return; }
         go({
-          kind: 'pexels', name: 'Photo', img: r.canvas, detail: r.score ? r.score.score : null,
+          kind: 'unsplash', name: 'Photo', img: r.canvas, detail: r.score ? r.score.score : null,
           photo: s.photo, themeName: T.theme.name, themeEmoji: T.theme.emoji
         });
       });
     } else if (s.kind === 'scene') {
       scene();
     } else {
-      // Saves from before the switch to Pexels (Wikimedia Commons or Lorem Picsum photos).
-      scene('Photos now come from Pexels, so this saved board continues with a generated scene.');
+      // Saves from before the switch to Unsplash (Wikimedia Commons or Lorem Picsum photos).
+      scene('Photos now come from Unsplash, so this saved board continues with a generated scene.');
     }
   }
   /* Dragging */
@@ -1174,8 +1193,8 @@ body.busy #board { pointer-events: none; }
       $('winTrips').hidden = !more;
       $('winMap').className = more ? 'btn' : 'btn primary';
       $('winPhoto').hidden = true; $('winPhoto').removeAttribute('src'); $('winView').textContent = 'View puzzle';
-      $('winCredit').innerHTML = G.kind === 'pexels' ? pexelsCredit(G.photo) : '';
-      $('winCredit').hidden = G.kind !== 'pexels';
+      $('winCredit').innerHTML = G.kind === 'unsplash' ? unsplashCredit(G.photo) : '';
+      $('winCredit').hidden = G.kind !== 'unsplash';
       $('win').hidden = false;
       (more ? $('winTrips') : $('winMap')).focus();
     }, 600);

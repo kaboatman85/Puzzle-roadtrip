@@ -3,7 +3,7 @@
   "private": true,
   "description": "An 8x8 portrait-piece photo puzzle that drives themed road trips. No build step; this file only pins a test-time dependency.",
   "scripts": {
-    "test": "node test_logic.js && node test_pexels.js"
+    "test": "node test_logic.js && node test_unsplash.js"
   },
   "devDependencies": {
     "jsdom": "^25.0.0"

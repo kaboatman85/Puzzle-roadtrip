@@ -17,7 +17,7 @@ self.addEventListener('activate', function (e) {
 // Same-origin assets: try the network first so a page load while online always gets the
 // current code (this app updates often, and a stale cached copy has caused real confusion
 // more than once). Cache the fresh response as an offline fallback; only fall back to the
-// cache when the network is unreachable. Cross-origin requests (Pexels searches and photos) are
+// cache when the network is unreachable. Cross-origin requests (Unsplash searches and photos) are
 // left alone so the puzzle photo feature is unaffected by this worker.
 self.addEventListener('fetch', function (e) {
   if (e.request.method !== 'GET') return;
